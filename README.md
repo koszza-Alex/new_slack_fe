@@ -1,1 +1,2 @@
-# new_slack_fe
+# slack_fe
+develop a site identical to slack.com
