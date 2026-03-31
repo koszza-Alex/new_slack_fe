@@ -130,7 +130,7 @@ export default function SearchBox(props: { userData: any }) {
           );
 
           const res = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/multi-search?keyword=${search_keyword}&workspaceId=${workspaceID}`
+            `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/multi-search?keyword=${search_keyword}&workspaceId=${workspaceID}`
           );
 
           const data =
