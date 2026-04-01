@@ -1,9 +1,11 @@
 "use client";
 
 import EditProfileModal from "./EditProfileModal";
+import { api } from "@/api";
 import { useEffect, useState } from "react";
 import { getUserById } from "@/lib/api";
 import { env } from "process";
+import { useMessageStore } from "@/store/message-store";
 import { useSocket } from "@/providers/SocketProvider"; // adjust path
 
 type Presence = "online" | "idle" | "offline";
@@ -24,6 +26,7 @@ type Props = {
 };
 
 export default function ProfileSidebar({ open, onClose, userdata }: Props) {
+    const { messages: msg, setMessages, appendMessage } = useMessageStore();
     const [editOpen, setEditOpen] = useState(false);
     const [user, setUser] = useState<User | null>(null);
 
@@ -150,7 +153,7 @@ export default function ProfileSidebar({ open, onClose, userdata }: Props) {
             for (let [key, value] of formData.entries()) {
                 // console.log(key, value);
             }
-            console.log("user================>", userdata);
+            const channelId = localStorage.getItem("channelId")
 
             // ✅ IMPORTANT: correct backend endpoint
             const res = await fetch(
@@ -161,14 +164,16 @@ export default function ProfileSidebar({ open, onClose, userdata }: Props) {
                 },
             );
             // console.log("res===>", res);
-
+            
             if (!res.ok) {
                 throw new Error("Profile update failed");
             }
-
+            
+            const response = await api.get(`/api/channels/${channelId}/messages`);
+            setMessages(response.data);
             // 1. REST update
             const result = await res.json();
-
+            
             // 2. socket broadcast
             socket?.emit("profile:update", {
                 id: user?.id,
@@ -183,12 +188,12 @@ export default function ProfileSidebar({ open, onClose, userdata }: Props) {
             setUser((prev) =>
                 prev
                     ? {
-                          ...prev,
-                          name: result.name ?? data.name,
-                          dispname:
-                              result.dispname ?? data.dispname ?? data.name,
-                          avatar,
-                      }
+                        ...prev,
+                        name: result.name ?? data.name,
+                        dispname:
+                            result.dispname ?? data.dispname ?? data.name,
+                        avatar,
+                    }
                     : prev,
             );
 
