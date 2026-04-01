@@ -115,13 +115,23 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
 
           <div className="w-px h-5 bg-gray-200 mx-1" />
 
-          <button
-            className="p-1.5 rounded-md hover:bg-gray-100"
-            onClick={() => setShowEmojiPicker((v) => !v)}
-            disabled={isPending}
-          >
-            <LuSmilePlus />
-          </button>
+          {/* Emoji picker trigger — wrapped in relative so the picker anchors to it */}
+          <div className="relative">
+            <button
+              className="p-1.5 rounded-md hover:bg-gray-100"
+              onClick={() => setShowEmojiPicker((v) => !v)}
+              disabled={isPending}
+            >
+              <LuSmilePlus />
+            </button>
+
+            {/* Picker opens below-right of the trigger button, above all other UI */}
+            {showEmojiPicker && (
+              <div className="absolute top-full right-[-130px] mt-1 z-50">
+                <EmojiPicker onSelect={handleEmojiSelect} />
+              </div>
+            )}
+          </div>
 
           {state === "message" && (
             <button
@@ -279,12 +289,6 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
         )}
       </div>
 
-      {/* Emoji picker */}
-      {showEmojiPicker && (
-        <div className="absolute top-[60px] right-4 z-20">
-          <EmojiPicker onSelect={handleEmojiSelect} />
-        </div>
-      )}
     </div>
   );
 };

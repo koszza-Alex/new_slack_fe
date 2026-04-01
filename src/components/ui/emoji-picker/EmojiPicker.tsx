@@ -6,9 +6,14 @@ type Props = {
   onSelect: (emoji: string) => void;
 };
 
+/**
+ * Renders the emoji-mart Picker.
+ * Positioning is handled entirely by the parent wrapper — this component
+ * is a plain unstyled container so callers can anchor it however they need.
+ */
 export default function EmojiPicker({ onSelect }: Props) {
   return (
-    <div className="absolute bottom-12 left-0 z-50 shadow-lg">
+    <div className="shadow-lg">
       <Picker
         data={async () =>
           fetch("https://cdn.jsdelivr.net/npm/@emoji-mart/data").then((res) =>
@@ -16,7 +21,7 @@ export default function EmojiPicker({ onSelect }: Props) {
           )
         }
         onEmojiSelect={(emoji: any) => {
-          onSelect(emoji.native); 
+          onSelect(emoji.native);
         }}
       />
     </div>
