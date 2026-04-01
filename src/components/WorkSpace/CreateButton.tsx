@@ -8,7 +8,7 @@ export default function CreateButton() {
   const ref = useRef<HTMLDivElement>(null);
 
   // close on outside click
-  useEffect(() => {
+  useEffect(() => { 
     const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);

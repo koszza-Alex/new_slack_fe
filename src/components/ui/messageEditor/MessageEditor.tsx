@@ -39,12 +39,13 @@ export default function MessageEditor(props: { userData: any }) {
     : params.channelId;
 
   const handleSend = () => {
-    if (!editor || isEmpty || !socket) return;
+    // Guard: require editor content, socket, channelId, and authenticated user
+    if (!editor || isEmpty || !socket || !channelId || !props.userData?.id) return;
 
     const content = editor.getHTML();
 
     socket.emit("send_message", {
-      channelId: channelId,
+      channelId,
       senderId: props.userData.id,
       content,
       createdAt: new Date(),
