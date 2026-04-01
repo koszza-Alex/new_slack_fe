@@ -3,6 +3,7 @@ import { api } from "@/api";
 import SlackLoader from "@/common/Loading";
 import { useSocket } from "@/providers/SocketProvider";
 import { useThreadStore } from "@/store/thread-store";
+import { ReactionView } from "@/lib/api/reactions";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import MainBar from "../MainTopbar/MainBar";
@@ -32,9 +33,9 @@ export const MainPage = (props: { userData: any }) => {
     closeThread,
     setThreadMessages,
     updateRootMessage,
+    updateThreadMessageReactions,
   } = useThreadStore();
 
-  // Open thread panel and fetch thread data for a message
   const handleCommentClick = async (message: any) => {
     openThread(message);
     try {
@@ -42,17 +43,20 @@ export const MainPage = (props: { userData: any }) => {
       setThreadMessages(res.data);
     } catch (err) {
       console.error("Failed to load thread:", err);
-      setThreadMessages([message]); // fallback: show just the root
+      setThreadMessages([message]);
     }
   };
 
-  // Load initial messages
   useEffect(() => {
     if (!channelId) return;
     const loadMessages = async () => {
       try {
         const res = await api.get(`/api/channels/${channelId}/messages`);
-        setMessages(res.data);
+        // Defense-in-depth: only keep root messages (parentId === null)
+        // The backend already filters this, but guard here too so no thread
+        // reply can ever leak into the channel view.
+        const rootOnly = (res.data as any[]).filter((m) => !m.parentId);
+        setMessages(rootOnly);
       } finally {
         setLoading(false);
       }
@@ -60,18 +64,17 @@ export const MainPage = (props: { userData: any }) => {
     loadMessages();
   }, [channelId]);
 
-  // Socket: receive new root messages and thread metadata updates
   useEffect(() => {
     if (!socket) return;
 
     socket.emit("join_channel", channelId);
 
     socket.on("new_message", (newMsg: any) => {
+      // Only append root messages — thread replies must never enter this list
+      if (newMsg.parentId) return;
       setMessages((prev) => [...prev, newMsg]);
     });
 
-    // When a thread reply is sent, the backend emits thread_updated with the
-    // updated root message (new replyCount / lastReplyAt). Sync it here.
     socket.on("thread_updated", (updatedRoot: any) => {
       setMessages((prev) =>
         prev.map((m) => (m.id === updatedRoot.id ? { ...m, ...updatedRoot } : m))
@@ -79,13 +82,26 @@ export const MainPage = (props: { userData: any }) => {
       updateRootMessage(updatedRoot);
     });
 
+    // Real-time reaction updates from other clients.
+    // Payload: { messageId, reactions: ReactionView[] }
+    socket.on("reaction_updated", (payload: { messageId: string; reactions: ReactionView[] }) => {
+      // Update channel message list
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === payload.messageId ? { ...m, reactions: payload.reactions } : m
+        )
+      );
+      // Update thread store if this message is currently open in the thread panel
+      updateThreadMessageReactions(payload.messageId, payload.reactions);
+    });
+
     return () => {
       socket.off("new_message");
       socket.off("thread_updated");
+      socket.off("reaction_updated");
     };
-  }, [socket, channelId]);
+  }, [socket, channelId, updateRootMessage, updateThreadMessageReactions]);
 
-  // Auto scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msg]);
@@ -100,10 +116,10 @@ export const MainPage = (props: { userData: any }) => {
     return groups;
   };
 
+  // Sort root messages oldest → newest, then group by date
   const sortedMessages = [...msg].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
-
   const groupedMessages = groupMessagesByDate(sortedMessages);
 
   const userMap = useRef<Record<string, number>>({});
@@ -126,6 +142,23 @@ export const MainPage = (props: { userData: any }) => {
     return `${days} day${days > 1 ? "s" : ""} ago`;
   };
 
+  /**
+   * Called by SlackMessage after a successful reaction toggle.
+   * Updates local channel state and broadcasts to other clients via socket.
+   * Payload shape changed: reactions[] (not reaction).
+   */
+  const handleReactionUpdate = (messageId: string, reactions: ReactionView[]) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, reactions } : m))
+    );
+    // Also sync thread store in case this message is the open thread root
+    updateThreadMessageReactions(messageId, reactions);
+    // Broadcast to other clients
+    if (socket && channelId) {
+      socket.emit("toggle_reaction", { channelId, messageId, reactions });
+    }
+  };
+
   if (!channelId)
     return (
       <div className="flex flex-col items-center justify-center h-full bg-gray-100">
@@ -142,7 +175,6 @@ export const MainPage = (props: { userData: any }) => {
         <MainBar />
 
         <div className="w-full relative h-[calc(100vh-133px)] flex flex-col justify-between">
-          {/* Messages container */}
           <div className="h-full overflow-y-scroll flex flex-col">
             <Introduction />
             {Object.entries(groupedMessages).map(([date, messages]) => (
@@ -156,11 +188,14 @@ export const MainPage = (props: { userData: any }) => {
                     time={item.createdAt}
                     text={item.content}
                     messageId={item.id}
+                    channelId={channelId ?? ""}
+                    currentUserId={props.userData?.id ?? null}
                     files={item.file ?? []}
-                    reactions={item.emoticon ?? []}
+                    reactions={item.reactions ?? []}
                     replies={item.replyCount ?? 0}
                     lastReply={formatLastReply(item.lastReplyAt)}
                     onCommentClick={() => handleCommentClick(item)}
+                    onReactionUpdate={handleReactionUpdate}
                     state="message"
                   />
                 ))}
@@ -169,14 +204,12 @@ export const MainPage = (props: { userData: any }) => {
             <div ref={bottomRef} />
           </div>
 
-          {/* Editor */}
           <div className="w-full z-10 px-4 pb-4">
             <MessageEditor userData={props.userData} />
           </div>
         </div>
       </div>
 
-      {/* Thread panel — only render when thread is open AND a message is selected */}
       {showThread && selectedMessage && channelId && (
         <div className="w-[550px] shrink-0">
           <Thread

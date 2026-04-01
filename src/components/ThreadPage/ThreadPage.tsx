@@ -2,6 +2,7 @@
 
 import { useSocket } from "@/providers/SocketProvider";
 import { useThreadStore } from "@/store/thread-store";
+import { ReactionView } from "@/lib/api/reactions";
 import MessageEditor from "@/components/ui/messageEditor/MessageEditor";
 import { useEffect, useRef } from "react";
 import { FaEllipsisH, FaRegWindowMaximize, FaTimes } from "react-icons/fa";
@@ -30,11 +31,11 @@ export const Thread: React.FC<ThreadProps> = ({
     threadMessages,
     isLoading,
     appendThreadMessage,
+    updateThreadMessageReactions,
   } = useThreadStore();
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  // Listen for real-time thread replies from other users in this channel
   useEffect(() => {
     if (!socket || !selectedMessage) return;
 
@@ -45,13 +46,19 @@ export const Thread: React.FC<ThreadProps> = ({
       }
     };
 
+    // Sync reaction updates that arrive via socket for any message in this thread
+    const handleReactionUpdated = (payload: { messageId: string; reactions: ReactionView[] }) => {
+      updateThreadMessageReactions(payload.messageId, payload.reactions);
+    };
+
     socket.on("new_thread_message", handleNewThreadMessage);
+    socket.on("reaction_updated", handleReactionUpdated);
     return () => {
       socket.off("new_thread_message", handleNewThreadMessage);
+      socket.off("reaction_updated", handleReactionUpdated);
     };
-  }, [socket, selectedMessage, appendThreadMessage]);
+  }, [socket, selectedMessage, appendThreadMessage, updateThreadMessageReactions]);
 
-  // Auto-scroll to bottom when replies arrive
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [threadMessages]);
@@ -61,7 +68,13 @@ export const Thread: React.FC<ThreadProps> = ({
 
   const getDisplayName = (sender: any) => sender?.dispname || "Slack_User";
 
-  // threadMessages[0] is always the root; rest are replies
+  const handleReactionUpdate = (messageId: string, reactions: ReactionView[]) => {
+    updateThreadMessageReactions(messageId, reactions);
+    if (socket && channelId) {
+      socket.emit("toggle_reaction", { channelId, messageId, reactions });
+    }
+  };
+
   const rootMsg = threadMessages[0] ?? selectedMessage;
   const replies = threadMessages.slice(1);
 
@@ -71,19 +84,13 @@ export const Thread: React.FC<ThreadProps> = ({
       <div className="flex justify-between items-center p-3 border-b border-gray-200 text-gray-600 shrink-0">
         <h2 className="text-xl font-bold">Thread</h2>
         <div className="flex items-center space-x-2">
-          <button className="p-1 hover:bg-gray-100 rounded-md">
-            <FaRegWindowMaximize size={15} />
-          </button>
-          <button className="p-1 hover:bg-gray-100 rounded-md">
-            <FaEllipsisH size={15} />
-          </button>
-          <button className="p-1 hover:bg-gray-100 rounded-md" onClick={onCloseThread}>
-            <FaTimes size={15} />
-          </button>
+          <button className="p-1 hover:bg-gray-100 rounded-md"><FaRegWindowMaximize size={15} /></button>
+          <button className="p-1 hover:bg-gray-100 rounded-md"><FaEllipsisH size={15} /></button>
+          <button className="p-1 hover:bg-gray-100 rounded-md" onClick={onCloseThread}><FaTimes size={15} /></button>
         </div>
       </div>
 
-      {/* Scrollable message area */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto flex flex-col">
         {isLoading ? (
           <div className="flex items-center justify-center h-full text-gray-400 text-sm">
@@ -91,7 +98,6 @@ export const Thread: React.FC<ThreadProps> = ({
           </div>
         ) : (
           <>
-            {/* Root (parent) message */}
             {rootMsg && (
               <SlackMessage
                 state="thread"
@@ -100,15 +106,17 @@ export const Thread: React.FC<ThreadProps> = ({
                 time={rootMsg.createdAt}
                 text={rootMsg.content}
                 files={[]}
-                reactions={[]}
+                reactions={rootMsg.reactions ?? []}
                 replies={0}
                 lastReply=""
                 messageId={rootMsg.id}
+                channelId={channelId}
+                currentUserId={userData?.id ?? null}
                 onCommentClick={() => {}}
+                onReactionUpdate={handleReactionUpdate}
               />
             )}
 
-            {/* Reply count divider */}
             {replies.length > 0 && (
               <div className="flex items-center w-full px-4 py-2">
                 <span className="text-sm text-gray-500 mr-3 whitespace-nowrap">
@@ -118,7 +126,6 @@ export const Thread: React.FC<ThreadProps> = ({
               </div>
             )}
 
-            {/* Thread replies */}
             {replies.map((reply) => (
               <SlackMessage
                 key={reply.id}
@@ -128,15 +135,17 @@ export const Thread: React.FC<ThreadProps> = ({
                 time={reply.createdAt}
                 text={reply.content}
                 files={[]}
-                reactions={[]}
+                reactions={reply.reactions ?? []}
                 replies={0}
                 lastReply=""
                 messageId={reply.id}
+                channelId={channelId}
+                currentUserId={userData?.id ?? null}
                 onCommentClick={() => {}}
+                onReactionUpdate={handleReactionUpdate}
               />
             ))}
 
-            {/* Empty state */}
             {replies.length === 0 && (
               <div className="px-4 py-3 text-sm text-gray-400">
                 No replies yet. Be the first to reply.
@@ -148,7 +157,7 @@ export const Thread: React.FC<ThreadProps> = ({
         )}
       </div>
 
-      {/* Reply editor — reuses the existing MessageEditor in thread-reply mode */}
+      {/* Reply editor */}
       <div className="shrink-0 px-3 pb-4 pt-2 border-t border-gray-100">
         <MessageEditor
           userData={userData}

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { ReactionView } from "@/lib/api/reactions";
 
 export interface ThreadMessage {
   id: string;
@@ -9,6 +10,7 @@ export interface ThreadMessage {
   threadRootId: string | null;
   replyCount: number;
   lastReplyAt: string | null;
+  reactions: ReactionView[];
   sender: {
     id: string;
     dispname: string | null;
@@ -17,9 +19,7 @@ export interface ThreadMessage {
 }
 
 type ThreadStore = {
-  // The root message whose thread is open
   selectedMessage: ThreadMessage | null;
-  // All messages in the thread (root + replies), ordered ASC
   threadMessages: ThreadMessage[];
   isOpen: boolean;
   isLoading: boolean;
@@ -29,8 +29,9 @@ type ThreadStore = {
   setThreadMessages: (messages: ThreadMessage[]) => void;
   appendThreadMessage: (message: ThreadMessage) => void;
   setLoading: (loading: boolean) => void;
-  // Update replyCount/lastReplyAt on a root message in the thread
-  updateRootMessage: (updated: ThreadMessage) => void;
+  updateRootMessage: (updated: Partial<ThreadMessage> & { id: string }) => void;
+  /** Replace the reactions array on a specific message inside the thread */
+  updateThreadMessageReactions: (messageId: string, reactions: ReactionView[]) => void;
 };
 
 export const useThreadStore = create<ThreadStore>((set) => ({
@@ -56,12 +57,23 @@ export const useThreadStore = create<ThreadStore>((set) => ({
 
   updateRootMessage: (updated) =>
     set((state) => ({
-      // Update selectedMessage metadata if it matches
       selectedMessage:
-        state.selectedMessage?.id === updated.id ? updated : state.selectedMessage,
-      // Update the root message inside threadMessages list too
+        state.selectedMessage?.id === updated.id
+          ? { ...state.selectedMessage, ...updated }
+          : state.selectedMessage,
       threadMessages: state.threadMessages.map((m) =>
         m.id === updated.id ? { ...m, ...updated } : m
       ),
+    })),
+
+  updateThreadMessageReactions: (messageId, reactions) =>
+    set((state) => ({
+      threadMessages: state.threadMessages.map((m) =>
+        m.id === messageId ? { ...m, reactions } : m
+      ),
+      selectedMessage:
+        state.selectedMessage?.id === messageId
+          ? { ...state.selectedMessage, reactions }
+          : state.selectedMessage,
     })),
 }));
