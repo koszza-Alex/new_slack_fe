@@ -75,3 +75,13 @@ export async function joinChannel(channelId: string, userId: string) {
 
   return res.json();
 }
+
+// Fetch thread (parent message + all replies) for a given messageId
+export async function getThread(channelId: string, messageId: string) {
+  const res = await fetch(
+    `${BASE_URL}/api/channels/${channelId}/messages/${messageId}/thread`,
+    { cache: 'no-store' }
+  );
+  if (!res.ok) throw new Error('Failed to fetch thread');
+  return res.json();
+}
