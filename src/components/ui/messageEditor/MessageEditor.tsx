@@ -25,31 +25,64 @@ import { VscListSelection } from "react-icons/vsc";
 import EmojiPicker from "../emoji-picker/EmojiPicker";
 import { useParams } from "next/navigation";
 
-
-type Props = {
-  onSend: (content: string) => void;
+type MessageEditorProps = {
+  userData: { id: string; [key: string]: any } | null;
+  // When set, the editor operates in thread-reply mode
+  parentMessageId?: string | null;
+  // Override the placeholder text (e.g. "Reply in thread…")
+  placeholder?: string;
+  // Called after a message is successfully emitted, with the raw payload
+  onMessageSent?: (payload: Record<string, unknown>) => void;
 };
 
-export default function MessageEditor(props: { userData: any }) {
+export default function MessageEditor({
+  userData,
+  parentMessageId,
+  placeholder,
+  onMessageSent,
+}: MessageEditorProps) {
   const { socket } = useSocket();
 
   const params = useParams();
+  // channelId from URL — used in channel mode; in thread mode it is passed via props
+  // but the thread panel lives inside the same channel route so params still works.
   const channelId = Array.isArray(params.channelId)
     ? params.channelId[0]
     : params.channelId;
 
   const handleSend = () => {
-    // Guard: require editor content, socket, channelId, and authenticated user
-    if (!editor || isEmpty || !socket || !channelId || !props.userData?.id) return;
+    // Common guards: need content, socket, channelId, and an authenticated user
+    if (!editor || isEmpty || !socket || !channelId || !userData?.id) return;
 
     const content = editor.getHTML();
 
-    socket.emit("send_message", {
-      channelId,
-      senderId: props.userData.id,
-      content,
-      createdAt: new Date(),
-    });
+    if (parentMessageId) {
+      // ── Thread reply mode ──────────────────────────────────────────────────
+      // Guard: parentMessageId must be a non-empty string
+      if (!parentMessageId.trim()) return;
+
+      const payload = {
+        channelId,
+        senderId: userData.id,
+        content,
+        parentId: parentMessageId,
+        createdAt: new Date(),
+      };
+
+      socket.emit("send_message", payload);
+      onMessageSent?.(payload);
+    } else {
+      // ── Normal channel message mode ────────────────────────────────────────
+      const payload = {
+        channelId,
+        senderId: userData.id,
+        content,
+        createdAt: new Date(),
+      };
+
+      socket.emit("send_message", payload);
+      onMessageSent?.(payload);
+    }
 
     editor.commands.clearContent();
   };
@@ -64,7 +97,7 @@ export default function MessageEditor(props: { userData: any }) {
     extensions: [
       StarterKit,
       Placeholder.configure({
-        placeholder: "Message #new-channel",
+        placeholder: placeholder ?? "Message #new-channel",
       }),
       Mention.configure({
         HTMLAttributes: {

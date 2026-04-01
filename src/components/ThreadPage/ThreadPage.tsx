@@ -2,12 +2,9 @@
 
 import { useSocket } from "@/providers/SocketProvider";
 import { useThreadStore } from "@/store/thread-store";
-import Placeholder from "@tiptap/extension-placeholder";
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useRef, useState } from "react";
+import MessageEditor from "@/components/ui/messageEditor/MessageEditor";
+import { useEffect, useRef } from "react";
 import { FaEllipsisH, FaRegWindowMaximize, FaTimes } from "react-icons/fa";
-import { IoMdSend } from "react-icons/io";
 import SlackMessage from "../ui/message/Message";
 
 interface UserData {
@@ -28,33 +25,14 @@ export const Thread: React.FC<ThreadProps> = ({
   channelId,
 }) => {
   const { socket } = useSocket();
-  const { selectedMessage, threadMessages, isLoading, appendThreadMessage } =
-    useThreadStore();
+  const {
+    selectedMessage,
+    threadMessages,
+    isLoading,
+    appendThreadMessage,
+  } = useThreadStore();
 
-  const [isEmpty, setIsEmpty] = useState(true);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Placeholder.configure({ placeholder: "Reply in thread..." }),
-    ],
-    content: "",
-    immediatelyRender: false,
-    onUpdate: ({ editor }) => {
-      setIsEmpty(editor.getText().trim().length === 0);
-    },
-    editorProps: {
-      handleKeyDown: (_view, event) => {
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-          handleSend();
-          return true;
-        }
-        return false;
-      },
-    },
-  });
 
   // Listen for real-time thread replies from other users in this channel
   useEffect(() => {
@@ -78,28 +56,10 @@ export const Thread: React.FC<ThreadProps> = ({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [threadMessages]);
 
-  const handleSend = () => {
-    // Guard: require editor content, socket, selected message, and authenticated user
-    if (!editor || isEmpty || !socket || !selectedMessage || !userData?.id) return;
-
-    socket.emit("send_message", {
-      channelId,
-      senderId: userData.id,
-      content: editor.getHTML(),
-      parentId: selectedMessage.id,
-      createdAt: new Date(),
-    });
-
-    editor.commands.clearContent();
-  };
-
   const getAvatarUrl = (sender: any) =>
-    `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}${
-      sender?.avatar ?? "/uploads/avatar.png"
-    }`;
+    `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}${sender?.avatar ?? "/uploads/avatar.png"}`;
 
-  const getDisplayName = (sender: any) =>
-    sender?.dispname || "Slack_User";
+  const getDisplayName = (sender: any) => sender?.dispname || "Slack_User";
 
   // threadMessages[0] is always the root; rest are replies
   const rootMsg = threadMessages[0] ?? selectedMessage;
@@ -117,10 +77,7 @@ export const Thread: React.FC<ThreadProps> = ({
           <button className="p-1 hover:bg-gray-100 rounded-md">
             <FaEllipsisH size={15} />
           </button>
-          <button
-            className="p-1 hover:bg-gray-100 rounded-md"
-            onClick={onCloseThread}
-          >
+          <button className="p-1 hover:bg-gray-100 rounded-md" onClick={onCloseThread}>
             <FaTimes size={15} />
           </button>
         </div>
@@ -191,28 +148,13 @@ export const Thread: React.FC<ThreadProps> = ({
         )}
       </div>
 
-      {/* Reply editor */}
+      {/* Reply editor — reuses the existing MessageEditor in thread-reply mode */}
       <div className="shrink-0 px-3 pb-4 pt-2 border-t border-gray-100">
-        <div className="border border-gray-200 rounded-lg bg-white">
-          <EditorContent
-            editor={editor}
-            className="min-h-[60px] max-h-[200px] overflow-y-auto px-3 py-2 text-sm [&_.ProseMirror]:outline-none [&_.ProseMirror]:border-none"
-          />
-          <div className="flex justify-end items-center px-2 pb-2">
-            <button
-              onClick={handleSend}
-              disabled={isEmpty || !userData?.id}
-              className={`flex items-center gap-1 px-3 py-1 rounded-md text-sm transition ${
-                isEmpty || !userData?.id
-                  ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-                  : "bg-green-800 text-white hover:bg-green-700"
-              }`}
-            >
-              <IoMdSend size={16} />
-              <span>Reply</span>
-            </button>
-          </div>
-        </div>
+        <MessageEditor
+          userData={userData}
+          parentMessageId={selectedMessage?.id ?? null}
+          placeholder="Reply in thread..."
+        />
       </div>
     </div>
   );
