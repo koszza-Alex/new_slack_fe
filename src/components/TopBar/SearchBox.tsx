@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { FiSearch } from "react-icons/fi";
 import SlackMessage from "../ui/message/Message";
+import { id } from "zod/v4/locales";
 
 export default function SearchBox(props: { userData: any }) {
 
@@ -179,15 +180,14 @@ export default function SearchBox(props: { userData: any }) {
         router.push(
           // `/workspace/${workspaceID}/channel/${item.id}`
           `/${workspaceID}/${item.id}`
-
         );
-
       }
 
       else if (item.type === "message") {
+        console.log("dsfdsfadf----->>>", item);
 
         router.push(
-          `/${workspaceID}/${channelId}?messageId=${item.id}`
+          `/${workspaceID}/${item.channelId}?messageId=${item.id}`
         );
 
       }
