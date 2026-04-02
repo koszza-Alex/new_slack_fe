@@ -108,7 +108,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
     };
 
     return (
-        <div
+        <div id={id}
             className="relative flex gap-3 px-[25px] py-2 bg-white text-gray-500 hover:bg-gray-100 w-full"
             onMouseOver={() => setShowToolbar(true)}
             onMouseLeave={() => {
