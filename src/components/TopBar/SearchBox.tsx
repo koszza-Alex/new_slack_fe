@@ -114,7 +114,7 @@ export default function SearchBox(props: { userData: any }) {
                 `/${workspaceID}/${item.id}`,
             );
         } else if (item.type === "message") {
-            router.push(`/${workspaceID}/${channelId}?messageId=${item.id}`);
+            router.push(`/${workspaceID}/${item.channelId}?messageId=${item.id}`);
         }
     };
     // console.log(results, "-------------------------------<<<<<<<<<<<<<<<<<<<<<<<<")

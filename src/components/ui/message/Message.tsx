@@ -24,6 +24,7 @@ interface FileItem {
 
 interface SlackMessageProps {
     state: string;
+    id?: string;
     avatar: string;
     username: string;
     time: string;
@@ -43,6 +44,7 @@ interface SlackMessageProps {
 
 export const SlackMessage: React.FC<SlackMessageProps> = ({
     state,
+    id,
     avatar,
     username,
     time,
