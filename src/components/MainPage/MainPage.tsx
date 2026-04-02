@@ -5,7 +5,7 @@ import { useSocket } from "@/providers/SocketProvider";
 import { useThreadStore } from "@/store/thread-store";
 import { useMessageStore } from "@/store/message-store";
 import { ReactionView } from "@/lib/api/reactions";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import MainBar from "../MainTopbar/MainBar";
 import MainTopBar from "../MainTopbar/MainTopbar";
@@ -23,6 +23,8 @@ export const MainPage = (props: { userData: any }) => {
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const params = useParams();
+  const searchparams = useSearchParams();
+  const messageId = searchparams.get('messageId')
   const channelId = Array.isArray(params.channelId)
     ? params.channelId[0]
     : params.channelId;
@@ -97,9 +99,54 @@ export const MainPage = (props: { userData: any }) => {
     };
   }, [socket, channelId, msg, updateRootMessage, updateThreadMessageReactions]);
 
+  const scrollToMessage = (messageId: string) => {
+    setTimeout(() => {
+      const element = document.getElementById(`msg-${messageId}`);
+      if (!element) {
+        console.warn(`No element found with id msg-${messageId}`);
+        return;
+      }
+
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      const highlightClasses = [
+        'bg-blue-100',
+        'border-2',
+        'border-yellow-400',
+        'rounded-lg',
+        'shadow-lg',
+        'transition-all',
+        'duration-300',
+      ];
+
+      element.classList.remove(...highlightClasses);
+      void element.offsetWidth;
+
+      element.classList.add(...highlightClasses);
+
+      // Remove highlight after 3 seconds
+      setTimeout(() => {
+        element.classList.remove(...highlightClasses);
+      }, 3000);
+
+    }, 100);
+  };
+
+  // ✅ Auto scroll to bottom
   useEffect(() => {
+    if (messageId) {
+      scrollToMessage(messageId);
+    }
+
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+
   }, [msg]);
+
+  useEffect(() => {
+    if (messageId) {
+      scrollToMessage(messageId);
+    }
+  }, [messageId]);
 
   const groupMessagesByDate = (messages: any[]) => {
     const groups: Record<string, any[]> = {};
@@ -174,6 +221,7 @@ export const MainPage = (props: { userData: any }) => {
                 {messages.map((item: any) => ( 
                   <SlackMessage
                     key={item.id}
+                    id={`msg-${item.id}`}
                     avatar={`${process.env.NEXT_PUBLIC_SOCKET_URL}${item.sender?.avatar ?? "/uploads/avatar.png"}`}
                     username={getDisplayName(item.sender)}
                     time={item.createdAt}

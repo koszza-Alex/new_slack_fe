@@ -22,6 +22,7 @@ interface FileItem {
 
 interface SlackMessageProps {
   state: string;
+  id?: string;
   avatar: string;
   username: string;
   time: string;
@@ -41,6 +42,7 @@ interface SlackMessageProps {
 
 export const SlackMessage: React.FC<SlackMessageProps> = ({
   state,
+  id,
   avatar,
   username,
   time,
@@ -98,7 +100,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
   };
 
   return (
-    <div
+    <div id={id}
       className="relative flex gap-3 px-[25px] py-2 bg-white text-gray-500 hover:bg-gray-100 w-full"
       onMouseOver={() => setShowToolbar(true)}
       onMouseLeave={() => {
@@ -204,9 +206,8 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                   </span>
                 </div>
                 <div
-                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                    showFiles ? "max-h-[500px] opacity-100 mt-3" : "max-h-0 opacity-0"
-                  }`}
+                  className={`overflow-hidden transition-all duration-300 ease-in-out ${showFiles ? "max-h-[500px] opacity-100 mt-3" : "max-h-0 opacity-0"
+                    }`}
                 >
                   <div className="flex gap-3 flex-wrap">
                     {files.map((file, i) => (
@@ -252,10 +253,9 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                       disabled={isPending}
                       title={userReacted ? "Remove your reaction" : "Add your reaction"}
                       className={`flex items-center gap-1 px-2 py-[3px] rounded-full text-xs border transition
-                        ${
-                          userReacted
-                            ? "bg-blue-100 border-blue-500 text-blue-700 font-semibold"
-                            : "bg-blue-50 border-blue-300 text-gray-600 hover:bg-blue-100"
+                        ${userReacted
+                          ? "bg-blue-100 border-blue-500 text-blue-700 font-semibold"
+                          : "bg-blue-50 border-blue-300 text-gray-600 hover:bg-blue-100"
                         }
                         ${isPending ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
                       `}
