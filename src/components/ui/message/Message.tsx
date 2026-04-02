@@ -3,7 +3,7 @@
 import { toggleReaction, ReactionView } from "@/lib/api/reactions";
 import DOMPurify from "dompurify";
 import dynamic from "next/dynamic";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
     FaEllipsisV,
     FaRegBookmark,
