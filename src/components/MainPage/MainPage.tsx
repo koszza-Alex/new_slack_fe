@@ -3,6 +3,7 @@ import { api } from "@/api";
 import SlackLoader from "@/common/Loading";
 import { useSocket } from "@/providers/SocketProvider";
 import { useThreadStore } from "@/store/thread-store";
+import { useMessageStore } from "@/store/message-store";
 import { ReactionView } from "@/lib/api/reactions";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -16,7 +17,7 @@ import MessageEditor from "../ui/messageEditor/MessageEditor";
 
 export const MainPage = (props: { userData: any }) => {
   const { socket } = useSocket();
-  const [msg, setMessages] = useState<any[]>([]);
+  const { messages: msg, setMessages, appendMessage } = useMessageStore();
   const [loading, setLoading] = useState(true);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -72,26 +73,20 @@ export const MainPage = (props: { userData: any }) => {
     socket.on("new_message", (newMsg: any) => {
       // Only append root messages — thread replies must never enter this list
       if (newMsg.parentId) return;
-      setMessages((prev) => [...prev, newMsg]);
+      appendMessage(newMsg);
     });
 
     socket.on("thread_updated", (updatedRoot: any) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === updatedRoot.id ? { ...m, ...updatedRoot } : m))
-      );
+      setMessages(msg.map((m) => (m.id === updatedRoot.id ? { ...m, ...updatedRoot } : m)));
       updateRootMessage(updatedRoot);
     });
 
     // Real-time reaction updates from other clients.
     // Payload: { messageId, reactions: ReactionView[] }
     socket.on("reaction_updated", (payload: { messageId: string; reactions: ReactionView[] }) => {
-      // Update channel message list
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === payload.messageId ? { ...m, reactions: payload.reactions } : m
-        )
-      );
-      // Update thread store if this message is currently open in the thread panel
+      setMessages(msg.map((m) =>
+        m.id === payload.messageId ? { ...m, reactions: payload.reactions } : m
+      ));
       updateThreadMessageReactions(payload.messageId, payload.reactions);
     });
 
@@ -100,7 +95,7 @@ export const MainPage = (props: { userData: any }) => {
       socket.off("thread_updated");
       socket.off("reaction_updated");
     };
-  }, [socket, channelId, updateRootMessage, updateThreadMessageReactions]);
+  }, [socket, channelId, msg, updateRootMessage, updateThreadMessageReactions]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -148,12 +143,8 @@ export const MainPage = (props: { userData: any }) => {
    * Payload shape changed: reactions[] (not reaction).
    */
   const handleReactionUpdate = (messageId: string, reactions: ReactionView[]) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === messageId ? { ...m, reactions } : m))
-    );
-    // Also sync thread store in case this message is the open thread root
+    setMessages(msg.map((m) => (m.id === messageId ? { ...m, reactions } : m)));
     updateThreadMessageReactions(messageId, reactions);
-    // Broadcast to other clients
     if (socket && channelId) {
       socket.emit("toggle_reaction", { channelId, messageId, reactions });
     }
