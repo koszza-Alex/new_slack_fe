@@ -3,7 +3,7 @@
 import { toggleReaction, ReactionView } from '@/lib/api/reactions';
 import DOMPurify from 'dompurify';
 import dynamic from "next/dynamic";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   FaEllipsisV,
   FaRegBookmark,
@@ -27,7 +27,6 @@ interface SlackMessageProps {
   time: string;
   text: string;
   files: FileItem[];
-  /** All reactions for this message — one entry per emoji type */
   reactions: ReactionView[];
   replies: number;
   lastReply: string;
@@ -35,7 +34,6 @@ interface SlackMessageProps {
   channelId: string;
   currentUserId: string | null;
   onCommentClick: () => void;
-  /** Called after a successful reaction toggle with the full updated reactions array */
   onReactionUpdate: (messageId: string, reactions: ReactionView[]) => void;
 }
 
@@ -57,30 +55,72 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
 }) => {
   const [showToolbar, setShowToolbar] = useState(false);
   const [showFiles, setShowFiles] = useState(true);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
   const [downloadTxt, setDownloadTxt] = useState('');
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isPending, setIsPending] = useState(false);
 
-  /**
-   * Toggle a specific emoji for the current user.
-   * Works for both picker selection (new emoji) and pill click (existing emoji).
-   */
+  const emojiBtnRef = useRef<HTMLButtonElement | null>(null);
+
   const handleEmojiSelect = async (emoji: string) => {
     if (!messageId || !emoji || !currentUserId || !channelId) return;
     if (isPending) return;
 
-    setShowEmojiPicker(false);
+    setShowEmoji(false);
     setIsPending(true);
 
     try {
       const result = await toggleReaction(channelId, messageId, emoji, currentUserId);
-      // result.reactions is the authoritative full array from the backend
       onReactionUpdate(result.messageId, result.reactions);
     } catch (err) {
       console.error("Failed to toggle reaction:", err);
     } finally {
       setIsPending(false);
     }
+  };
+
+  const handleEmojiClick = () => {
+    if (!emojiBtnRef.current) return;
+
+    const rect = emojiBtnRef.current.getBoundingClientRect();
+    const pickerWidth = 320;
+    const pickerHeight = 400;
+    const offset = 8;
+
+    let top: number;
+    let left = rect.left;
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Prefer below, fallback to above
+    if (spaceBelow >= pickerHeight + offset) {
+      top = rect.bottom + offset-40;
+    } else if (spaceAbove >= pickerHeight + offset) {
+      top = rect.top - pickerHeight - offset-20;
+    } else {
+      // fallback clamp
+      top = Math.max(offset, window.innerHeight - pickerHeight - offset);
+    }
+
+    // Prevent right overflow
+    if (window.innerWidth - rect.left < pickerWidth) {
+      left = rect.right - pickerWidth;
+    }
+
+    // Prevent left overflow
+    if (left < offset) {
+      left = offset;
+    }
+
+    setPickerStyle({
+      position: "fixed",
+      top: `${top}px`,
+      left: `${left}px`,
+      zIndex: 9999,
+    });
+
+    setShowEmoji((v) => !v);
   };
 
   const isImage = (type: string) =>
@@ -103,7 +143,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
       onMouseOver={() => setShowToolbar(true)}
       onMouseLeave={() => {
         setShowToolbar(false);
-        setShowEmojiPicker(false);
+        setShowEmoji(false);
       }}
     >
       {/* Hover toolbar */}
@@ -115,23 +155,15 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
 
           <div className="w-px h-5 bg-gray-200 mx-1" />
 
-          {/* Emoji picker trigger — wrapped in relative so the picker anchors to it */}
-          <div className="relative">
-            <button
-              className="p-1.5 rounded-md hover:bg-gray-100"
-              onClick={() => setShowEmojiPicker((v) => !v)}
-              disabled={isPending}
-            >
-              <LuSmilePlus />
-            </button>
-
-            {/* Picker opens below-right of the trigger button, above all other UI */}
-            {showEmojiPicker && (
-              <div className="absolute top-full right-[-130px] mt-1 z-50">
-                <EmojiPicker onSelect={handleEmojiSelect} />
-              </div>
-            )}
-          </div>
+          {/* Emoji trigger */}
+          <button
+            ref={emojiBtnRef}
+            className="p-1.5 rounded-md hover:bg-gray-100"
+            onClick={handleEmojiClick}
+            disabled={isPending}
+          >
+            <LuSmilePlus />
+          </button>
 
           {state === "message" && (
             <button
@@ -141,6 +173,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
               <FaRegCommentDots />
             </button>
           )}
+
           <button className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100">
             <FaRegShareSquare />
           </button>
@@ -203,8 +236,9 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                     )}
                   </span>
                 </div>
+
                 <div
-                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                  className={`overflow-hidden transition-all duration-300 ${
                     showFiles ? "max-h-[500px] opacity-100 mt-3" : "max-h-0 opacity-0"
                   }`}
                 >
@@ -212,7 +246,6 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                     {files.map((file, i) => (
                       <div
                         key={i}
-                        style={{ transitionDelay: `${i * 50}ms` }}
                         className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-white shadow-sm w-[220px]"
                       >
                         <div className="w-10 h-10 rounded-xl bg-blue-400 flex items-center justify-center text-sm text-white">
@@ -239,7 +272,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
               </div>
             )}
 
-            {/* Multi-reaction pills — one per emoji type, Slack style */}
+            {/* Reactions */}
             {reactions && reactions.length > 0 && (
               <div className="flex gap-1.5 mt-2 flex-wrap items-center">
                 {reactions.map((r) => {
@@ -250,15 +283,11 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                       key={r.emoji}
                       onClick={() => handleEmojiSelect(r.emoji)}
                       disabled={isPending}
-                      title={userReacted ? "Remove your reaction" : "Add your reaction"}
-                      className={`flex items-center gap-1 px-2 py-[3px] rounded-full text-xs border transition
-                        ${
-                          userReacted
-                            ? "bg-blue-100 border-blue-500 text-blue-700 font-semibold"
-                            : "bg-blue-50 border-blue-300 text-gray-600 hover:bg-blue-100"
-                        }
-                        ${isPending ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-                      `}
+                      className={`flex items-center gap-1 px-2 py-[3px] rounded-full text-xs border ${
+                        userReacted
+                          ? "bg-blue-100 border-blue-500 text-blue-700"
+                          : "bg-blue-50 border-blue-300 text-gray-600"
+                      }`}
                     >
                       <span>{r.emoji}</span>
                       <span className="font-bold">{r.count}</span>
@@ -273,7 +302,6 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
               <div className="flex items-center gap-2 mt-3 text-sm text-gray-500">
                 <img
                   src="/avatar.png"
-                  alt="no_avatar"
                   className="w-[25px] h-[25px] rounded-lg bg-yellow-100"
                 />
                 <span
@@ -289,6 +317,12 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
         )}
       </div>
 
+      {/* ✅ FINAL FIXED PICKER */}
+      {showEmoji && (
+        <div style={pickerStyle}>
+          <EmojiPicker onSelect={handleEmojiSelect} />
+        </div>
+      )}
     </div>
   );
 };
