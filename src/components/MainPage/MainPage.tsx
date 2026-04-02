@@ -180,7 +180,7 @@ export const MainPage = (props: { userData: any }) => {
             {Object.entries(groupedMessages).map(([date, messages]) => (
               <div key={date}>
                 <DividerDate date={date} />
-                {messages.map((item: any) => (
+                {messages.map((item: any) => ( 
                   <SlackMessage
                     key={item.id}
                     avatar={`${process.env.NEXT_PUBLIC_SOCKET_URL}${item.sender?.avatar ?? "/uploads/avatar.png"}`}
