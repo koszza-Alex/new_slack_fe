@@ -50,36 +50,57 @@ export default function MessageEditor({
     ? params.channelId[0]
     : params.channelId;
 
-  const handleSend = () => {
+  const handleSend = async () => {
     // Common guards: need content, socket, channelId, and an authenticated user
     if (!editor || isEmpty || !socket || !channelId || !userData?.id) return;
 
     const content = editor.getHTML();
 
-    if (parentMessageId) {
-      // ── Thread reply mode ──────────────────────────────────────────────────
-      // Guard: parentMessageId must be a non-empty string
-      if (!parentMessageId.trim()) return;
+    // Upload any selected files first, collect returned file IDs
+    let fileIds: string[] = [];
+    if (selectedFiles.length > 0) {
+      const formData = new FormData();
+      selectedFiles.forEach((entry) => formData.append("files", entry.file));
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/files`,
+          { method: "POST", body: formData },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          // backend returns array of file objects or ids
+          fileIds = (Array.isArray(data) ? data : data.files ?? []).map(
+            (f: any) => f.id ?? f,
+          );
+        }
+      } catch (err) {
+        console.error("File upload failed:", err);
+      }
+      // clear previews
+      selectedFiles.forEach((e) => { if (e.preview) URL.revokeObjectURL(e.preview); });
+      setSelectedFiles([]);
+    }
 
+    if (parentMessageId) {
+      if (!parentMessageId.trim()) return;
       const payload = {
         channelId,
         senderId: userData.id,
         content,
         parentId: parentMessageId,
+        fileIds,
         createdAt: new Date(),
       };
-
       socket.emit("send_message", payload);
       onMessageSent?.(payload);
     } else {
-      // ── Normal channel message mode ────────────────────────────────────────
       const payload = {
         channelId,
         senderId: userData.id,
         content,
+        fileIds,
         createdAt: new Date(),
       };
-
       socket.emit("send_message", payload);
       onMessageSent?.(payload);
     }
@@ -90,6 +111,7 @@ export default function MessageEditor({
   const [showEmoji, setShowEmoji] = useState(false);
   const [isEmpty, setIsEmpty] = useState(true);
   const [showFormat, setShowFormat] = useState(true);
+  const [selectedFiles, setSelectedFiles] = useState<{ file: File; preview: string | null }[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -128,12 +150,25 @@ export default function MessageEditor({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
 
-    console.log("Selected file:", file);
+    const entries = files.map((file) => ({
+      file,
+      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+    }));
 
-    // TODO: upload to server (S3, backend, etc.)
+    setSelectedFiles((prev) => [...prev, ...entries]);
+    // reset input so the same file can be re-selected
+    e.target.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles((prev) => {
+      const entry = prev[index];
+      if (entry.preview) URL.revokeObjectURL(entry.preview);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   if (!editor) return null;
@@ -201,6 +236,29 @@ export default function MessageEditor({
           [&_.ProseMirror]:border-none"
       />
 
+      {/* File preview strip */}
+      {selectedFiles.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-2.5 py-2 border-t border-gray-100">
+          {selectedFiles.map((entry, i) => (
+            <div key={i} className="relative group w-16 h-16 rounded-md overflow-hidden border border-gray-200 bg-gray-50 flex items-center justify-center">
+              {entry.preview ? (
+                <img src={entry.preview} className="w-full h-full object-cover" />
+              ) : (
+                <div className="text-[10px] text-center text-gray-500 px-1 break-all leading-tight">
+                  {entry.file.name}
+                </div>
+              )}
+              <button
+                onClick={() => removeFile(i)}
+                className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Bottom bar */}
       <div className="flex justify-between items-center p-2 text-gray-500 relative">
         <div className="flex gap-3">
@@ -216,6 +274,7 @@ export default function MessageEditor({
             type="file"
             ref={fileInputRef}
             className="hidden"
+            multiple
             onChange={handleFileChange}
           />
 

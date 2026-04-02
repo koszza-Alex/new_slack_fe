@@ -3,8 +3,8 @@
 import EditProfileModal from "./EditProfileModal";
 import { useEffect, useState } from "react";
 import { getUserById } from "@/lib/api";
-import { env } from "process";
-import { useSocket } from "@/providers/SocketProvider"; // adjust path
+import { useSocket } from "@/providers/SocketProvider";
+import { useMessageStore } from "@/store/message-store";
 
 type Presence = "online" | "idle" | "offline";
 
@@ -33,6 +33,7 @@ export default function ProfileSidebar({ open, onClose, userdata }: Props) {
     const [localTime, setLocalTime] = useState("");
 
     const { socket } = useSocket();
+    const { messages, setMessages } = useMessageStore();
     // ---------------------------
     // Fetch user
     // ---------------------------
@@ -178,6 +179,22 @@ export default function ProfileSidebar({ open, onClose, userdata }: Props) {
             });
 
             avatar = result.avatar ? result.avatar : avatar;
+
+            // update zustand message store — reflect new dispname/avatar on all messages
+            setMessages(
+                messages.map((m) =>
+                    m.sender?.id === userdata.id
+                        ? {
+                              ...m,
+                              sender: {
+                                  ...m.sender,
+                                  dispname: result.dispname ?? m.sender.dispname,
+                                  avatar: result.avatar ?? m.sender.avatar,
+                              },
+                          }
+                        : m,
+                ),
+            );
 
             // ✅ KEEP YOUR EXISTING UI LOGIC
             setUser((prev) =>
