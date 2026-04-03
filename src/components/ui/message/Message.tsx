@@ -95,9 +95,9 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
 
     // Prefer below, fallback to above
     if (spaceBelow >= pickerHeight + offset) {
-      top = rect.bottom + offset-40;
+      top = rect.bottom + offset;
     } else if (spaceAbove >= pickerHeight + offset) {
-      top = rect.top - pickerHeight - offset-20;
+      top = rect.top - pickerHeight - offset-40;
     } else {
       // fallback clamp
       top = Math.max(offset, window.innerHeight - pickerHeight - offset);
