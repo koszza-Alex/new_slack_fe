@@ -39,6 +39,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
             const uid = typeof window !== "undefined" ? localStorage.getItem("userId") : null;
             if (uid) {
                 socketInstance.emit("register_user", uid);
+                // Mark current user online locally immediately — don't wait for the broadcast echo
+                setOnline(uid);
             }
         });
 

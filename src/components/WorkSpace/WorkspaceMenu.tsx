@@ -5,6 +5,7 @@ import UserTooltip from "@/components/WorkSpace/UserTooltip";
 import ProfileSidebar from "@/components/WorkSpace//ProfileSidebar";
 import PauseNotificationsMenu from "@/components/WorkSpace/PauseNotificationsMenu";
 import { useRouter } from "next/navigation";
+import { useSocket } from "@/providers/SocketProvider";
 import { usePresenceStore, presenceColor } from "@/store/presence-store";
 
 export default function WorkspaceMenu(props: { userData: any }) {
@@ -12,6 +13,7 @@ export default function WorkspaceMenu(props: { userData: any }) {
     const ref = useRef<HTMLDivElement>(null);
     const [profileOpen, setProfileOpen] = useState(false);
     const router = useRouter();
+    const { socket } = useSocket();
 
     // Real presence: current user is online if their id is in the presence store
     const { isOnline } = usePresenceStore();
@@ -29,6 +31,11 @@ export default function WorkspaceMenu(props: { userData: any }) {
     }, []);
 
     const signOut = () => {
+        const userId = typeof window !== "undefined" ? localStorage.getItem("userId") : null;
+        // Notify all other clients immediately before the socket disconnects
+        if (socket && userId) {
+            socket.emit("user_signed_out", userId);
+        }
         localStorage.removeItem("token");
         localStorage.removeItem("userId");
         router.push("/auth/sign_in");

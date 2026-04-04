@@ -8,7 +8,6 @@ import MessageEditor from "@/components/ui/messageEditor/MessageEditor";
 import { useEffect, useRef } from "react";
 import { FaEllipsisH, FaRegWindowMaximize, FaTimes } from "react-icons/fa";
 import SlackMessage from "../ui/message/Message";
-
 interface UserData {
   id: string;
   dispname?: string | null;
@@ -24,6 +23,10 @@ interface ThreadProps {
   dmConversationId?: string;
   /** Required in DM mode to call the DM reaction endpoint */
   workspaceId?: string;
+  /** DM-specific edit override — returns updatedAt on success */
+  onDmEditSave?: (messageId: string, content: string) => Promise<string>;
+  /** DM-specific delete override */
+  onDmDeleteConfirm?: (messageId: string) => Promise<void>;
 }
 
 export const Thread: React.FC<ThreadProps> = ({
@@ -32,6 +35,8 @@ export const Thread: React.FC<ThreadProps> = ({
   channelId,
   dmConversationId,
   workspaceId,
+  onDmEditSave,
+  onDmDeleteConfirm,
 }) => {
   const { socket } = useSocket();
   const {
@@ -40,6 +45,8 @@ export const Thread: React.FC<ThreadProps> = ({
     isLoading,
     appendThreadMessage,
     updateThreadMessageReactions,
+    updateThreadMessageContent,
+    removeThreadMessage,
   } = useThreadStore();
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -102,6 +109,14 @@ export const Thread: React.FC<ThreadProps> = ({
     }
   };
 
+  const handleThreadMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
+    updateThreadMessageContent(messageId, newContent, newUpdatedAt);
+  };
+
+  const handleThreadMessageDelete = (messageId: string) => {
+    removeThreadMessage(messageId);
+  };
+
   const rootMsg = threadMessages[0] ?? selectedMessage;
   const replies = threadMessages.slice(1);
 
@@ -131,6 +146,8 @@ export const Thread: React.FC<ThreadProps> = ({
                 avatar={getAvatarUrl(rootMsg.sender)}
                 username={getDisplayName(rootMsg.sender)}
                 time={rootMsg.createdAt}
+                createdAt={rootMsg.createdAt}
+                updatedAt={rootMsg.updatedAt}
                 text={rootMsg.content}
                 files={[]}
                 reactions={rootMsg.reactions ?? []}
@@ -139,11 +156,16 @@ export const Thread: React.FC<ThreadProps> = ({
                 messageId={rootMsg.id}
                 channelId={channelId ?? ""}
                 currentUserId={userData?.id ?? null}
+                senderId={rootMsg.sender?.id}
                 onCommentClick={() => {}}
                 onReactionUpdate={handleChannelReactionUpdate}
                 onDmReactionSelect={dmConversationId
                   ? (emoji) => handleDmReactionSelect(rootMsg.id, emoji)
                   : undefined}
+                onMessageUpdate={handleThreadMessageUpdate}
+                onMessageDelete={handleThreadMessageDelete}
+                onEditSave={onDmEditSave}
+                onDeleteConfirm={onDmDeleteConfirm}
               />
             )}
 
@@ -163,6 +185,8 @@ export const Thread: React.FC<ThreadProps> = ({
                 avatar={getAvatarUrl(reply.sender)}
                 username={getDisplayName(reply.sender)}
                 time={reply.createdAt}
+                createdAt={reply.createdAt}
+                updatedAt={reply.updatedAt}
                 text={reply.content}
                 files={[]}
                 reactions={reply.reactions ?? []}
@@ -171,11 +195,16 @@ export const Thread: React.FC<ThreadProps> = ({
                 messageId={reply.id}
                 channelId={channelId ?? ""}
                 currentUserId={userData?.id ?? null}
+                senderId={reply.sender?.id}
                 onCommentClick={() => {}}
                 onReactionUpdate={handleChannelReactionUpdate}
                 onDmReactionSelect={dmConversationId
                   ? (emoji) => handleDmReactionSelect(reply.id, emoji)
                   : undefined}
+                onMessageUpdate={handleThreadMessageUpdate}
+                onMessageDelete={handleThreadMessageDelete}
+                onEditSave={onDmEditSave}
+                onDeleteConfirm={onDmDeleteConfirm}
               />
             ))}
 

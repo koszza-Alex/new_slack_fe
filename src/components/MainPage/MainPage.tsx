@@ -28,6 +28,36 @@ export const MainPage = (props: { userData: any }) => {
         ? params.channelId[0]
         : params.channelId;
 
+    // Thread panel resizable width
+    const THREAD_MIN = 550;
+    const THREAD_MAX = 825; // ≈ 1.5 × 550
+    const [threadWidth, setThreadWidth] = useState(THREAD_MIN);
+    const threadDragging = useRef(false);
+    const threadStartX = useRef(0);
+    const threadStartWidth = useRef(THREAD_MIN);
+
+    const onThreadDragStart = (e: React.MouseEvent) => {
+        e.preventDefault();
+        threadDragging.current = true;
+        threadStartX.current = e.clientX;
+        threadStartWidth.current = threadWidth;
+
+        const onMove = (ev: MouseEvent) => {
+            if (!threadDragging.current) return;
+            // Dragging left edge → moving left increases width
+            const delta = threadStartX.current - ev.clientX;
+            const next = Math.min(THREAD_MAX, Math.max(THREAD_MIN, threadStartWidth.current + delta));
+            setThreadWidth(next);
+        };
+        const onUp = () => {
+            threadDragging.current = false;
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+    };
+
     const {
         isOpen: showThread,
         selectedMessage,
@@ -37,6 +67,11 @@ export const MainPage = (props: { userData: any }) => {
         updateRootMessage,
         updateThreadMessageReactions,
     } = useThreadStore();
+
+    // Close thread when the active channel changes
+    useEffect(() => {
+        closeThread();
+    }, [channelId]);
 
     const handleCommentClick = async (message: any) => {
         openThread(message);
@@ -203,11 +238,6 @@ export const MainPage = (props: { userData: any }) => {
         return `${days} day${days > 1 ? "s" : ""} ago`;
     };
 
-    /**
-     * Called by SlackMessage after a successful reaction toggle.
-     * Updates local channel state and broadcasts to other clients via socket.
-     * Payload shape changed: reactions[] (not reaction).
-     */
     const handleReactionUpdate = (
         messageId: string,
         reactions: ReactionView[],
@@ -219,6 +249,14 @@ export const MainPage = (props: { userData: any }) => {
         if (socket && channelId) {
             socket.emit("toggle_reaction", { channelId, messageId, reactions });
         }
+    };
+
+    const handleMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
+        setMessages(msg.map((m) => (m.id === messageId ? { ...m, content: newContent, updatedAt: newUpdatedAt } : m)));
+    };
+
+    const handleMessageDelete = (messageId: string) => {
+        setMessages(msg.filter((m) => m.id !== messageId));
     };
 
     if (!channelId)
@@ -233,8 +271,8 @@ export const MainPage = (props: { userData: any }) => {
     if (loading) return <SlackLoader />;
 
     return (
-        <div className="flex h-full">
-            <div className="min-w-[320px] w-full h-full bg-white">
+        <div className="flex h-full overflow-hidden">
+            <div className="flex-1 min-w-0 h-full bg-white">
                 <MainTopBar />
                 <MainBar />
 
@@ -254,12 +292,15 @@ export const MainPage = (props: { userData: any }) => {
                                                 item.sender,
                                             )}
                                             time={item.createdAt}
+                                            createdAt={item.createdAt}
+                                            updatedAt={item.updatedAt}
                                             text={item.content}
                                             messageId={item.id}
                                             channelId={channelId ?? ""}
                                             currentUserId={
                                                 props.userData?.id ?? null
                                             }
+                                            senderId={item.sender?.id}
                                             files={item.file ?? []}
                                             reactions={item.reactions ?? []}
                                             replies={item.replyCount ?? 0}
@@ -272,6 +313,8 @@ export const MainPage = (props: { userData: any }) => {
                                             onReactionUpdate={
                                                 handleReactionUpdate
                                             }
+                                            onMessageUpdate={handleMessageUpdate}
+                                            onMessageDelete={handleMessageDelete}
                                             state="message"
                                         />
                                     ))}
@@ -288,7 +331,12 @@ export const MainPage = (props: { userData: any }) => {
             </div>
 
             {showThread && selectedMessage && channelId && (
-                <div className="w-[550px] shrink-0">
+                <div className="relative shrink-0" style={{ width: `${threadWidth}px`, minWidth: `${THREAD_MIN}px`, maxWidth: `${THREAD_MAX}px` }}>
+                    {/* Left drag handle */}
+                    <div
+                        onMouseDown={onThreadDragStart}
+                        className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-gray-300/50 transition-colors z-10"
+                    />
                     <Thread
                         onCloseThread={closeThread}
                         userData={props.userData}

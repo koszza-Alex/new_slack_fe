@@ -53,6 +53,40 @@ export default function DmPage({ conversationId }: DmPageProps) {
         updateThreadMessageReactions,
     } = useThreadStore();
 
+    // Close thread when the active DM conversation changes
+    useEffect(() => {
+        closeThread();
+    }, [conversationId]);
+
+    // Thread panel resizable width
+    const THREAD_MIN = 550;
+    const THREAD_MAX = 825; // ≈ 1.5 × 550
+    const [threadWidth, setThreadWidth] = useState(THREAD_MIN);
+    const threadDragging = useRef(false);
+    const threadStartX = useRef(0);
+    const threadStartWidth = useRef(THREAD_MIN);
+
+    const onThreadDragStart = (e: React.MouseEvent) => {
+        e.preventDefault();
+        threadDragging.current = true;
+        threadStartX.current = e.clientX;
+        threadStartWidth.current = threadWidth;
+
+        const onMove = (ev: MouseEvent) => {
+            if (!threadDragging.current) return;
+            const delta = threadStartX.current - ev.clientX;
+            const next = Math.min(THREAD_MAX, Math.max(THREAD_MIN, threadStartWidth.current + delta));
+            setThreadWidth(next);
+        };
+        const onUp = () => {
+            threadDragging.current = false;
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+    };
+
     // Load conversation info + root messages, and mark as read
     useEffect(() => {
         if (!conversationId || !user?.id || !workspaceId) return;
@@ -131,16 +165,52 @@ export default function DmPage({ conversationId }: DmPageProps) {
         if (!user?.id || !workspaceId) return;
         try {
             const result = await toggleDmReaction(workspaceId, conversationId, messageId, emoji, user.id);
-            // Update local state
             setMessages((prev) =>
                 prev.map((m) => (m.id === messageId ? { ...m, reactions: result.reactions } : m)),
             );
             updateThreadMessageReactions(messageId, result.reactions);
-            // Broadcast to other clients
             socket?.emit("toggle_dm_reaction", { conversationId, messageId, reactions: result.reactions });
         } catch (err) {
             console.error("Failed to toggle DM reaction:", err);
         }
+    };
+
+    const handleDmMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: newContent, updatedAt: newUpdatedAt } : m)));
+    };
+
+    const handleDmMessageDelete = (messageId: string) => {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    };
+
+    /** DM-specific edit fetch — returns updatedAt on success */
+    const dmEditSave = async (messageId: string, content: string): Promise<string> => {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/workspaces/${workspaceId}/dm/conversations/${conversationId}/messages/${messageId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ content, senderId: user?.id }),
+            },
+        );
+        if (!res.ok) throw new Error("Failed to update DM message");
+        const data = await res.json();
+        return data?.updatedAt ?? new Date().toISOString();
+    };
+
+    /** DM-specific delete fetch */
+    const dmDeleteConfirm = async (messageId: string): Promise<void> => {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/workspaces/${workspaceId}/dm/conversations/${conversationId}/messages/${messageId}`,
+            {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ senderId: user?.id }),
+            },
+        );
+        if (!res.ok) throw new Error("Failed to delete DM message");
     };
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -220,21 +290,24 @@ export default function DmPage({ conversationId }: DmPageProps) {
                                         avatar={getAvatarUrl(item.sender)}
                                         username={getDisplayName(item.sender)}
                                         time={item.createdAt}
+                                        createdAt={item.createdAt}
+                                        updatedAt={item.updatedAt}
                                         text={item.content}
                                         messageId={item.id}
-                                        // channelId is empty — reactions use handleReactionUpdate below
                                         channelId=""
                                         currentUserId={user?.id ?? null}
+                                        senderId={item.senderId}
                                         files={[]}
                                         reactions={item.reactions ?? []}
                                         replies={item.replyCount ?? 0}
                                         lastReply={formatLastReply(item.lastReplyAt)}
                                         onCommentClick={() => handleCommentClick(item)}
-                                        onReactionUpdate={(_msgId, _reactions) => {
-                                            // Reactions are handled via handleReactionUpdate
-                                            // which is called from the emoji picker directly
-                                        }}
+                                        onReactionUpdate={(_msgId, _reactions) => {}}
                                         onDmReactionSelect={(emoji) => handleReactionUpdate(item.id, emoji)}
+                                        onMessageUpdate={handleDmMessageUpdate}
+                                        onMessageDelete={handleDmMessageDelete}
+                                        onEditSave={dmEditSave}
+                                        onDeleteConfirm={dmDeleteConfirm}
                                     />
                                 ))}
                             </div>
@@ -255,12 +328,19 @@ export default function DmPage({ conversationId }: DmPageProps) {
 
             {/* Thread panel — reuses Thread.tsx with dmConversationId */}
             {showThread && selectedMessage && (
-                <div className="w-[550px] shrink-0">
+                <div className="relative shrink-0" style={{ width: `${threadWidth}px`, minWidth: `${THREAD_MIN}px`, maxWidth: `${THREAD_MAX}px` }}>
+                    {/* Left drag handle */}
+                    <div
+                        onMouseDown={onThreadDragStart}
+                        className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-gray-300/50 transition-colors z-10"
+                    />
                     <Thread
                         onCloseThread={closeThread}
                         userData={user}
                         dmConversationId={conversationId}
                         workspaceId={workspaceId}
+                        onDmEditSave={dmEditSave}
+                        onDmDeleteConfirm={dmDeleteConfirm}
                     />
                 </div>
             )}

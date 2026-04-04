@@ -32,6 +32,10 @@ type ThreadStore = {
   updateRootMessage: (updated: Partial<ThreadMessage> & { id: string }) => void;
   /** Replace the reactions array on a specific message inside the thread */
   updateThreadMessageReactions: (messageId: string, reactions: ReactionView[]) => void;
+  /** Update the content of a specific thread message after an edit */
+  updateThreadMessageContent: (messageId: string, content: string, updatedAt: string) => void;
+  /** Remove a specific thread message after deletion */
+  removeThreadMessage: (messageId: string) => void;
 };
 
 export const useThreadStore = create<ThreadStore>((set) => ({
@@ -75,5 +79,21 @@ export const useThreadStore = create<ThreadStore>((set) => ({
         state.selectedMessage?.id === messageId
           ? { ...state.selectedMessage, reactions }
           : state.selectedMessage,
+    })),
+
+  updateThreadMessageContent: (messageId, content, updatedAt) =>
+    set((state) => ({
+      threadMessages: state.threadMessages.map((m) =>
+        m.id === messageId ? { ...m, content, updatedAt } : m
+      ),
+      selectedMessage:
+        state.selectedMessage?.id === messageId
+          ? { ...state.selectedMessage, content, updatedAt }
+          : state.selectedMessage,
+    })),
+
+  removeThreadMessage: (messageId) =>
+    set((state) => ({
+      threadMessages: state.threadMessages.filter((m) => m.id !== messageId),
     })),
 }));
