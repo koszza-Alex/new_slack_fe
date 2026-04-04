@@ -3,12 +3,14 @@
 import { useSearchParams } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 
-export default function WorkspaceAvatar(props:{userData:any}) {
-    
+export default function WorkspaceAvatar(props: { userData: any }) {
+
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const workspace_name = useSearchParams().get("workspace_name")
+  
+    const workspace_name = localStorage.getItem("workspaceName");
+
 
     // Close on outside click
     useEffect(() => {
@@ -41,12 +43,12 @@ export default function WorkspaceAvatar(props:{userData:any}) {
             onMouseEnter={handleEnter}
             onMouseLeave={handleLeave}
         >
-            {/* Avatar trigger */}
+            {/* Avatar trigger — shows first letter of current workspace name */}
             <div
                 onClick={() => setOpen((prev) => !prev)}
-                className="w-10 h-10 rounded-xl bg-[#867688] flex items-center justify-center text-[#2b1c2f] font-medium cursor-pointer hover:brightness-110 transition"
+                className="w-10 h-10 rounded-xl bg-[#867688] flex items-center justify-center text-white text-[18px] font-semibold cursor-pointer hover:brightness-110 transition select-none"
             >
-                {workspace_name?.slice(0,1)}
+                {workspace_name ? workspace_name.charAt(0).toUpperCase() : "?"}
             </div>
 
             {/* Dropdown */}
@@ -55,10 +57,9 @@ export default function WorkspaceAvatar(props:{userData:any}) {
                     absolute left-[-9px] top-11 w-[350px]
                     bg-white text-black rounded-xl shadow-2xl overflow-hidden z-50
                     transform transition-all duration-200 ease-out
-                    ${
-                        open
-                            ? "opacity-100 translate-y-0 scale-100 pointer-events-auto"
-                            : "opacity-0 -translate-y-2 scale-95 pointer-events-none"
+                    ${open
+                        ? "opacity-100 translate-y-0 scale-100 pointer-events-auto"
+                        : "opacity-0 -translate-y-2 scale-95 pointer-events-none"
                     }
                 `}
             >
@@ -82,12 +83,12 @@ export default function WorkspaceAvatar(props:{userData:any}) {
                 <div className="p-2">
                     <div className="flex items-center gap-3 p-2 rounded-md cursor-pointer hover:bg-gray-100">
                         <div className="w-8 h-8 bg-gray-400 rounded flex items-center justify-center text-white">
-                        {props.userData?.dispname?.slice(0, 1) || ''}
+                            {props.userData?.dispname?.slice(0, 1) || ''}
                         </div>
                         <div>
-                            <div className="font-medium">{props.userData?.dispname|| ''}</div>
+                            <div className="font-medium">{props.userData?.dispname || ''}</div>
                             <div className="text-xs text-gray-500">
-                                {props.userData?.dispname||''}.slack.com
+                                {props.userData?.dispname || ''}.slack.com
                             </div>
                         </div>
                     </div>

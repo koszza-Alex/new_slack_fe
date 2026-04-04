@@ -165,7 +165,7 @@ export default function SearchBox(props: { userData: any }) {
               rounded-md shadow-lg
               border
               overflow-hidden
-              z-50
+              z-500
             "
                     >
                         {/* INPUT */}

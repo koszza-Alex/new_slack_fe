@@ -3,14 +3,14 @@
 import { MainPage } from "@/components/MainPage/MainPage";
 import TopBar from "@/components/TopBar/TopBar";
 import { WorkSpace } from "@/components/WorkSpace/WorkSpace";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { ReactNode, useEffect } from "react";
 import { useAuth } from "@/context/Authcontext";
 
 export default function ClientLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
 
-  // ✅ use context instead of useState
   const { user, setUser } = useAuth();
 
   useEffect(() => {
@@ -36,8 +36,11 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
           return;
         }
 
-        // ✅ set global user
         setUser(data);
+        // Store userId so SocketProvider can send it as a presence identifier
+        if (data?.id) {
+          localStorage.setItem("userId", data.id);
+        }
 
       } catch (error) {
         console.error("Auth check failed:", error);
@@ -47,21 +50,35 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
     checkAuth();
   }, []);
 
+  // DM routes render their own full layout (sidebar + DmPage) inside {children}.
+  // MainPage must not render alongside them or it creates a broken double-panel layout.
+  const isDmRoute = pathname?.includes("/dm/");
+
   return (
     <div className="h-screen flex flex-col">
       <TopBar />
 
       <div className="flex h-[calc(100vh-40px)]">
-  
-        <WorkSpace userData={user}/>
 
-        <div className="flex-grow h-full">
-          {children}
-        </div>
+        <WorkSpace userData={user} />
 
-        <div className="w-full">
-          <MainPage userData={user}/>
-        </div>
+        {isDmRoute ? (
+          // DM route: children already contains sidebar + DmPage
+          <div className="flex-1 h-full overflow-hidden">
+            {children}
+          </div>
+        ) : (
+          <>
+            {/* Channel route: children = ChannelList sidebar, MainPage = chat area */}
+            <div className="flex-grow h-full">
+              {children}
+            </div>
+
+            <div className="w-full">
+              <MainPage userData={user} />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

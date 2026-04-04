@@ -48,7 +48,7 @@ export default function DividerDate({ date }: DividerDateProps) {
   };
 
   return (
-    <div className="sticky top-0 z-10 flex justify-center py-2 flex items-center w-full bg-white">
+    <div className="sticky top-0 z-5 flex justify-center py-2 flex items-center w-full bg-white">
       {/* Left Line */}
       <div className="flex-1 h-px bg-[#E0E0E0]" />
 

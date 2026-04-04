@@ -97,6 +97,7 @@ export default function InvitePeopleModal({ open, onClose }: Props) {
                               h-[77px]
                               px-3
                               text-[14px]
+                              text-black
                               border border-gray-300
                               rounded-md
                               outline-none

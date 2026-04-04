@@ -21,6 +21,7 @@ interface FileItem {
 }
 
 interface SlackMessageProps {
+  id?: string;
   state: string;
   avatar: string;
   username: string;
@@ -35,9 +36,17 @@ interface SlackMessageProps {
   currentUserId: string | null;
   onCommentClick: () => void;
   onReactionUpdate: (messageId: string, reactions: ReactionView[]) => void;
+  /** Hide the thread/reply button — used in DM mode where threads don't apply */
+  hideThreadButton?: boolean;
+  /**
+   * When set, emoji selection calls this instead of the channel toggleReaction API.
+   * Used in DM mode where reactions go through a different endpoint.
+   */
+  onDmReactionSelect?: (emoji: string) => void;
 }
 
 export const SlackMessage: React.FC<SlackMessageProps> = ({
+  id,
   state,
   avatar,
   username,
@@ -52,6 +61,8 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
   currentUserId,
   onCommentClick,
   onReactionUpdate,
+  hideThreadButton = false,
+  onDmReactionSelect,
 }) => {
   const [showToolbar, setShowToolbar] = useState(false);
   const [showFiles, setShowFiles] = useState(true);
@@ -63,12 +74,21 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
   const emojiBtnRef = useRef<HTMLButtonElement | null>(null);
 
   const handleEmojiSelect = async (emoji: string) => {
-    if (!messageId || !emoji || !currentUserId || !channelId) return;
+    if (!messageId || !emoji || !currentUserId) return;
     if (isPending) return;
 
     setShowEmoji(false);
-    setIsPending(true);
 
+    // DM mode — delegate to parent handler which calls the DM reaction endpoint
+    if (onDmReactionSelect) {
+      onDmReactionSelect(emoji);
+      return;
+    }
+
+    // Channel mode — requires channelId
+    if (!channelId) return;
+
+    setIsPending(true);
     try {
       const result = await toggleReaction(channelId, messageId, emoji, currentUserId);
       onReactionUpdate(result.messageId, result.reactions);
@@ -97,7 +117,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
     if (spaceBelow >= pickerHeight + offset) {
       top = rect.bottom + offset;
     } else if (spaceAbove >= pickerHeight + offset) {
-      top = rect.top - pickerHeight - offset-40;
+      top = rect.top - pickerHeight - offset-34;
     } else {
       // fallback clamp
       top = Math.max(offset, window.innerHeight - pickerHeight - offset);
@@ -139,6 +159,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
 
   return (
     <div
+      id={id}
       className="relative flex gap-3 px-[25px] py-2 bg-white text-gray-500 hover:bg-gray-100 w-full"
       onMouseOver={() => setShowToolbar(true)}
       onMouseLeave={() => {
@@ -165,7 +186,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
             <LuSmilePlus />
           </button>
 
-          {state === "message" && (
+          {state === "message" && !hideThreadButton && (
             <button
               className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"
               onClick={onCommentClick}
@@ -297,8 +318,8 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
               </div>
             )}
 
-            {/* Replies */}
-            {replies > 0 && state === "message" && (
+            {/* Replies — only shown in channel mode */}
+            {replies > 0 && state === "message" && !hideThreadButton && (
               <div className="flex items-center gap-2 mt-3 text-sm text-gray-500">
                 <img
                   src="/avatar.png"
