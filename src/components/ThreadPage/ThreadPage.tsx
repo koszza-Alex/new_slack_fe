@@ -23,6 +23,10 @@ interface ThreadProps {
   dmConversationId?: string;
   /** Required in DM mode to call the DM reaction endpoint */
   workspaceId?: string;
+  /** DM-specific edit override — returns updatedAt on success */
+  onDmEditSave?: (messageId: string, content: string) => Promise<string>;
+  /** DM-specific delete override */
+  onDmDeleteConfirm?: (messageId: string) => Promise<void>;
 }
 
 export const Thread: React.FC<ThreadProps> = ({
@@ -31,6 +35,8 @@ export const Thread: React.FC<ThreadProps> = ({
   channelId,
   dmConversationId,
   workspaceId,
+  onDmEditSave,
+  onDmDeleteConfirm,
 }) => {
   const { socket } = useSocket();
   const {
@@ -158,6 +164,8 @@ export const Thread: React.FC<ThreadProps> = ({
                   : undefined}
                 onMessageUpdate={handleThreadMessageUpdate}
                 onMessageDelete={handleThreadMessageDelete}
+                onEditSave={onDmEditSave}
+                onDeleteConfirm={onDmDeleteConfirm}
               />
             )}
 
@@ -195,6 +203,8 @@ export const Thread: React.FC<ThreadProps> = ({
                   : undefined}
                 onMessageUpdate={handleThreadMessageUpdate}
                 onMessageDelete={handleThreadMessageDelete}
+                onEditSave={onDmEditSave}
+                onDeleteConfirm={onDmDeleteConfirm}
               />
             ))}
 

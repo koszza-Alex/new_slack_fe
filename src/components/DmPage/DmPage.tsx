@@ -183,6 +183,36 @@ export default function DmPage({ conversationId }: DmPageProps) {
         setMessages((prev) => prev.filter((m) => m.id !== messageId));
     };
 
+    /** DM-specific edit fetch — returns updatedAt on success */
+    const dmEditSave = async (messageId: string, content: string): Promise<string> => {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/workspaces/${workspaceId}/dm/conversations/${conversationId}/messages/${messageId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ content, senderId: user?.id }),
+            },
+        );
+        if (!res.ok) throw new Error("Failed to update DM message");
+        const data = await res.json();
+        return data?.updatedAt ?? new Date().toISOString();
+    };
+
+    /** DM-specific delete fetch */
+    const dmDeleteConfirm = async (messageId: string): Promise<void> => {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/workspaces/${workspaceId}/dm/conversations/${conversationId}/messages/${messageId}`,
+            {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ senderId: user?.id }),
+            },
+        );
+        if (!res.ok) throw new Error("Failed to delete DM message");
+    };
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     const groupMessagesByDate = (msgs: DmMessageItem[]) => {
@@ -276,6 +306,8 @@ export default function DmPage({ conversationId }: DmPageProps) {
                                         onDmReactionSelect={(emoji) => handleReactionUpdate(item.id, emoji)}
                                         onMessageUpdate={handleDmMessageUpdate}
                                         onMessageDelete={handleDmMessageDelete}
+                                        onEditSave={dmEditSave}
+                                        onDeleteConfirm={dmDeleteConfirm}
                                     />
                                 ))}
                             </div>
@@ -307,6 +339,8 @@ export default function DmPage({ conversationId }: DmPageProps) {
                         userData={user}
                         dmConversationId={conversationId}
                         workspaceId={workspaceId}
+                        onDmEditSave={dmEditSave}
+                        onDmDeleteConfirm={dmDeleteConfirm}
                     />
                 </div>
             )}

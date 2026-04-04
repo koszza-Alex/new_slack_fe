@@ -271,8 +271,8 @@ export const MainPage = (props: { userData: any }) => {
     if (loading) return <SlackLoader />;
 
     return (
-        <div className="flex h-full">
-            <div className="min-w-[320px] w-full h-full bg-white">
+        <div className="flex h-full overflow-hidden">
+            <div className="flex-1 min-w-0 h-full bg-white">
                 <MainTopBar />
                 <MainBar />
 

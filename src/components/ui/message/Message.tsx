@@ -53,6 +53,17 @@ interface SlackMessageProps {
   onMessageUpdate?: (messageId: string, newContent: string, updatedAt: string) => void;
   /** Called after a successful delete so the parent can remove it from its list */
   onMessageDelete?: (messageId: string) => void;
+  /**
+   * When provided, replaces the internal channel PATCH fetch for edit.
+   * Used in DM context where the endpoint is different.
+   * Must return the updatedAt ISO string on success, or throw on failure.
+   */
+  onEditSave?: (messageId: string, content: string) => Promise<string>;
+  /**
+   * When provided, replaces the internal channel DELETE fetch.
+   * Used in DM context where the endpoint is different.
+   */
+  onDeleteConfirm?: (messageId: string) => Promise<void>;
   /** Hide the thread/reply button — used in DM mode where threads don't apply */
   hideThreadButton?: boolean;
   /**
@@ -83,6 +94,8 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
   onReactionUpdate,
   onMessageUpdate,
   onMessageDelete,
+  onEditSave,
+  onDeleteConfirm,
   hideThreadButton = false,
   onDmReactionSelect,
 }) => {
@@ -193,18 +206,24 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
     if (!trimmed || !messageId) return;
     setIsSavingEdit(true);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/channels/${channelId}/messages/${messageId}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ content: trimmed, senderId: currentUserId }),
-        },
-      );
-      if (!res.ok) throw new Error("Failed to update message");
-      const data = await res.json();
-      const newUpdatedAt: string = data?.updatedAt ?? new Date().toISOString();
+      let newUpdatedAt: string;
+      if (onEditSave) {
+        // DM (or other) context provides its own fetch
+        newUpdatedAt = await onEditSave(messageId, trimmed);
+      } else {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/channels/${channelId}/messages/${messageId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify({ content: trimmed, senderId: currentUserId }),
+          },
+        );
+        if (!res.ok) throw new Error("Failed to update message");
+        const data = await res.json();
+        newUpdatedAt = data?.updatedAt ?? new Date().toISOString();
+      }
       onMessageUpdate?.(messageId, trimmed, newUpdatedAt);
       setIsEditing(false);
     } catch (err) {
@@ -218,16 +237,20 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
     if (!messageId) return;
     setShowActionMenu(false);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/channels/${channelId}/messages/${messageId}`,
-        {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ senderId: currentUserId }),
-        },
-      );
-      if (!res.ok) throw new Error("Failed to delete message");
+      if (onDeleteConfirm) {
+        await onDeleteConfirm(messageId);
+      } else {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/channels/${channelId}/messages/${messageId}`,
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify({ senderId: currentUserId }),
+          },
+        );
+        if (!res.ok) throw new Error("Failed to delete message");
+      }
       onMessageDelete?.(messageId);
     } catch (err) {
       console.error("Delete failed:", err);
@@ -332,7 +355,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
         <div className="flex items-center gap-2">
           <span className="font-semibold text-gray-900 hover:underline cursor-pointer">{username}</span>
           <span className="text-sm text-gray-500">{formatTime(time)}</span>
-          {isEdited && <span className="text-xs text-gray-400 italic">edited</span>}
+          {isEdited && <span className="text-xs text-gray-400 italic">(edited)</span>}
         </div>
 
         {/* Inline edit mode */}
