@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { BsPerson, BsThreeDotsVertical } from "react-icons/bs";
 import { CiHeadphones } from "react-icons/ci";
 import { FiSearch } from "react-icons/fi";
-import { HiOutlineStar } from "react-icons/hi";
 import { LuBell } from "react-icons/lu";
 import { api } from "@/api";
 import { Tooltip } from "./Tooltip";
@@ -25,6 +24,7 @@ export default function MainTopBar() {
     : params.channelId;
 
   const [channel, setChannel] = useState<ChannelDetail | null>(null);
+  const [memberCount, setMemberCount] = useState<number>(0);
 
   useEffect(() => {
     if (!channelId) {
@@ -37,8 +37,14 @@ export default function MainTopBar() {
       .catch(() => setChannel(null));
   }, [channelId]);
 
+  useEffect(() => {
+    api
+      .get<{ count: number }>('/api/user/count')
+      .then((res) => setMemberCount(res.data.count))
+      .catch(() => setMemberCount(0));
+  }, []);
+
   const activeChannel = channel?.name ?? "";
-  const memberCount = channel?.members?.length ?? 0;
 
   return (
     <div className="flex justify-between items-center h-[49px] px-4 py-2 ">
@@ -64,7 +70,7 @@ export default function MainTopBar() {
           children={
             <button className="flex items-center gap-1 px-2 py-1 border border-gray-300 rounded cursor-pointer hover:bg-gray-100">
               <BsPerson color="#5d524c" size={20} />
-              <span className="text-sm text-[#5d524c]">{memberCount + 1}</span>
+              <span className="text-sm text-[#5d524c]">{memberCount}</span>
             </button>
           }
           text1="View all members of this channel"

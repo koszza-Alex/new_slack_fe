@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspace } from "@/context/Workspacecontext";
 import { useState, useRef, useEffect } from "react";
 
 export default function WorkspaceAvatar(props: { userData: any }) {
@@ -8,8 +8,9 @@ export default function WorkspaceAvatar(props: { userData: any }) {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-    const workspace_name = localStorage.getItem("workspaceName");
+
+    const { workspace } = useWorkspace();
+    const workspace_name = workspace?.name ?? null;
 
 
     // Close on outside click
