@@ -58,7 +58,7 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
     <div className="h-screen flex flex-col">
       <TopBar />
 
-      <div className="flex h-[calc(100vh-40px)]">
+      <div className="flex h-[calc(100vh-38px)]">
 
         <WorkSpace userData={user} />
 

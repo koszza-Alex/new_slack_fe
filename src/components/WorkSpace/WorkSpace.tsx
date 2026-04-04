@@ -72,7 +72,7 @@ export const WorkSpace = (props: { userData: any }) => {
     }, [socket, pathname, incrementUnread]);
 
     return (
-        <div className="w-[75px] min-w-[75px] bg-gradient-to-b from-[#4A154B] to-[#3F0E40] flex flex-col items-center py-2">
+        <div className="w-[75px] min-w-[75px] bg-gradient-to-b from-[#3F0E40] to-[#4A154B] flex flex-col items-center py-2">
             {/* Workspace avatar — shows first letter of workspace name */}
             <div className="mb-3">
                 <WorkspaceAvatar userData={props.userData} />
