@@ -6,7 +6,7 @@ export default function Home() {
   const router = useRouter()
 
   useEffect(() => {
-    router.push("/auth/sign_in")
+    router.push("/[workspaceId]/_components")
   }, [router])
 
   return null
