@@ -13,6 +13,13 @@ import {
 import { LuSmilePlus } from "react-icons/lu";
 import { PiListStarBold } from "react-icons/pi";
 
+/** Stable keys for the three custom image-based emoticons */
+const IMAGE_EMOTICONS: Record<string, string> = {
+  tick: "/emoticons/tick.png",
+  eye: "/emoticons/eye.png",
+  welcome: "/emoticons/welcome.png",
+};
+
 const EmojiPicker = dynamic(() => import("../emoji-picker/EmojiPicker"), { ssr: false });
 
 interface FileItem {
@@ -170,9 +177,9 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
       {/* Hover toolbar */}
       {state !== "search" && showToolbar && (
         <div className="absolute right-4 top-[-20px] flex items-center bg-white border border-gray-200 rounded-xl shadow-sm px-2 py-1 z-11">
-          <img src="/emoticons/tick.png" className="p-1 rounded-md hover:bg-gray-100" />
-          <img src="/emoticons/eye.png" className="p-1 rounded-md hover:bg-gray-100" />
-          <img src="/emoticons/welcome.png" className="p-1 rounded-md hover:bg-gray-100" />
+          <img src="/emoticons/tick.png" className="p-1 rounded-md hover:bg-gray-100 cursor-pointer" onClick={() => handleEmojiSelect("tick")} />
+          <img src="/emoticons/eye.png" className="p-1 rounded-md hover:bg-gray-100 cursor-pointer" onClick={() => handleEmojiSelect("eye")} />
+          <img src="/emoticons/welcome.png" className="p-1 rounded-md hover:bg-gray-100 cursor-pointer" onClick={() => handleEmojiSelect("welcome")} />
 
           <div className="w-px h-5 bg-gray-200 mx-1" />
 
@@ -310,7 +317,11 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                           : "bg-blue-50 border-blue-300 text-gray-600"
                       }`}
                     >
-                      <span>{r.emoji}</span>
+                      {IMAGE_EMOTICONS[r.emoji] ? (
+                        <img src={IMAGE_EMOTICONS[r.emoji]} alt={r.emoji} className="w-4 h-4 object-contain" />
+                      ) : (
+                        <span>{r.emoji}</span>
+                      )}
                       <span className="font-bold">{r.count}</span>
                     </button>
                   );
