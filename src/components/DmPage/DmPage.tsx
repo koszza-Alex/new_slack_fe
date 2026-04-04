@@ -165,16 +165,22 @@ export default function DmPage({ conversationId }: DmPageProps) {
         if (!user?.id || !workspaceId) return;
         try {
             const result = await toggleDmReaction(workspaceId, conversationId, messageId, emoji, user.id);
-            // Update local state
             setMessages((prev) =>
                 prev.map((m) => (m.id === messageId ? { ...m, reactions: result.reactions } : m)),
             );
             updateThreadMessageReactions(messageId, result.reactions);
-            // Broadcast to other clients
             socket?.emit("toggle_dm_reaction", { conversationId, messageId, reactions: result.reactions });
         } catch (err) {
             console.error("Failed to toggle DM reaction:", err);
         }
+    };
+
+    const handleDmMessageUpdate = (messageId: string, newContent: string) => {
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: newContent } : m)));
+    };
+
+    const handleDmMessageDelete = (messageId: string) => {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
     };
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -256,19 +262,18 @@ export default function DmPage({ conversationId }: DmPageProps) {
                                         time={item.createdAt}
                                         text={item.content}
                                         messageId={item.id}
-                                        // channelId is empty — reactions use handleReactionUpdate below
                                         channelId=""
                                         currentUserId={user?.id ?? null}
+                                        senderId={item.senderId}
                                         files={[]}
                                         reactions={item.reactions ?? []}
                                         replies={item.replyCount ?? 0}
                                         lastReply={formatLastReply(item.lastReplyAt)}
                                         onCommentClick={() => handleCommentClick(item)}
-                                        onReactionUpdate={(_msgId, _reactions) => {
-                                            // Reactions are handled via handleReactionUpdate
-                                            // which is called from the emoji picker directly
-                                        }}
+                                        onReactionUpdate={(_msgId, _reactions) => {}}
                                         onDmReactionSelect={(emoji) => handleReactionUpdate(item.id, emoji)}
+                                        onMessageUpdate={handleDmMessageUpdate}
+                                        onMessageDelete={handleDmMessageDelete}
                                     />
                                 ))}
                             </div>

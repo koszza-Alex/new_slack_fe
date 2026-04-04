@@ -238,11 +238,6 @@ export const MainPage = (props: { userData: any }) => {
         return `${days} day${days > 1 ? "s" : ""} ago`;
     };
 
-    /**
-     * Called by SlackMessage after a successful reaction toggle.
-     * Updates local channel state and broadcasts to other clients via socket.
-     * Payload shape changed: reactions[] (not reaction).
-     */
     const handleReactionUpdate = (
         messageId: string,
         reactions: ReactionView[],
@@ -254,6 +249,14 @@ export const MainPage = (props: { userData: any }) => {
         if (socket && channelId) {
             socket.emit("toggle_reaction", { channelId, messageId, reactions });
         }
+    };
+
+    const handleMessageUpdate = (messageId: string, newContent: string) => {
+        setMessages(msg.map((m) => (m.id === messageId ? { ...m, content: newContent } : m)));
+    };
+
+    const handleMessageDelete = (messageId: string) => {
+        setMessages(msg.filter((m) => m.id !== messageId));
     };
 
     if (!channelId)
@@ -295,6 +298,7 @@ export const MainPage = (props: { userData: any }) => {
                                             currentUserId={
                                                 props.userData?.id ?? null
                                             }
+                                            senderId={item.sender?.id}
                                             files={item.file ?? []}
                                             reactions={item.reactions ?? []}
                                             replies={item.replyCount ?? 0}
@@ -307,6 +311,8 @@ export const MainPage = (props: { userData: any }) => {
                                             onReactionUpdate={
                                                 handleReactionUpdate
                                             }
+                                            onMessageUpdate={handleMessageUpdate}
+                                            onMessageDelete={handleMessageDelete}
                                             state="message"
                                         />
                                     ))}
