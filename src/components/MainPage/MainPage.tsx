@@ -66,6 +66,8 @@ export const MainPage = (props: { userData: any }) => {
         setThreadMessages,
         updateRootMessage,
         updateThreadMessageReactions,
+        updateThreadMessageContent,
+        removeThreadMessage,
     } = useThreadStore();
 
     // Close thread when the active channel changes
@@ -144,10 +146,38 @@ export const MainPage = (props: { userData: any }) => {
             },
         );
 
+        // Real-time message edit from other clients.
+        // Payload: { messageId, content, updatedAt }
+        socket.on(
+            "messageEdited",
+            (payload: { messageId: string; content: string; updatedAt: string }) => {
+                setMessages(
+                    msg.map((m) =>
+                        m.id === payload.messageId
+                            ? { ...m, content: payload.content, updatedAt: payload.updatedAt }
+                            : m,
+                    ),
+                );
+                updateThreadMessageContent(payload.messageId, payload.content, payload.updatedAt);
+            },
+        );
+
+        // Real-time message deletion from other clients.
+        // Payload: { messageId }
+        socket.on(
+            "messageDeleted",
+            (payload: { messageId: string }) => {
+                setMessages(msg.filter((m) => m.id !== payload.messageId));
+                removeThreadMessage(payload.messageId);
+            },
+        );
+
         return () => {
             socket.off("new_message");
             socket.off("thread_updated");
             socket.off("reaction_updated");
+            socket.off("messageEdited");
+            socket.off("messageDeleted");
         };
     }, [
         socket,
@@ -253,10 +283,18 @@ export const MainPage = (props: { userData: any }) => {
 
     const handleMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
         setMessages(msg.map((m) => (m.id === messageId ? { ...m, content: newContent, updatedAt: newUpdatedAt } : m)));
+        // Broadcast edit to other subscribers in this channel
+        if (socket && channelId) {
+            socket.emit('message_edit', { channelId, messageId, content: newContent, updatedAt: newUpdatedAt });
+        }
     };
 
     const handleMessageDelete = (messageId: string) => {
         setMessages(msg.filter((m) => m.id !== messageId));
+        // Broadcast deletion to other subscribers in this channel
+        if (socket && channelId) {
+            socket.emit('message_delete', { channelId, messageId });
+        }
     };
 
     if (!channelId)

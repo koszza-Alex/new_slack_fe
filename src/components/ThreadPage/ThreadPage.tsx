@@ -65,14 +65,28 @@ export const Thread: React.FC<ThreadProps> = ({
       updateThreadMessageReactions(payload.messageId, payload.reactions);
     };
 
+    const handleMessageEdited = (payload: { messageId: string; content: string; updatedAt: string }) => {
+      updateThreadMessageContent(payload.messageId, payload.content, payload.updatedAt);
+    };
+
+    const handleMessageDeleted = (payload: { messageId: string }) => {
+      removeThreadMessage(payload.messageId);
+    };
+
     const threadEvent = dmConversationId ? "new_dm_thread_message" : "new_thread_message";
     const reactionEvent = dmConversationId ? "dm_reaction_updated" : "reaction_updated";
+    const editEvent = dmConversationId ? "dmMessageEdited" : "messageEdited";
+    const deleteEvent = dmConversationId ? "dmMessageDeleted" : "messageDeleted";
 
     socket.on(threadEvent, handleNewThreadMessage);
     socket.on(reactionEvent, handleReactionUpdated);
+    socket.on(editEvent, handleMessageEdited);
+    socket.on(deleteEvent, handleMessageDeleted);
     return () => {
       socket.off(threadEvent, handleNewThreadMessage);
       socket.off(reactionEvent, handleReactionUpdated);
+      socket.off(editEvent, handleMessageEdited);
+      socket.off(deleteEvent, handleMessageDeleted);
     };
   }, [socket, selectedMessage, dmConversationId, appendThreadMessage, updateThreadMessageReactions]);
 
@@ -111,10 +125,26 @@ export const Thread: React.FC<ThreadProps> = ({
 
   const handleThreadMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
     updateThreadMessageContent(messageId, newContent, newUpdatedAt);
+    // Broadcast to other subscribers
+    if (socket) {
+      if (dmConversationId) {
+        socket.emit('dm_message_edit', { conversationId: dmConversationId, messageId, content: newContent, updatedAt: newUpdatedAt });
+      } else if (channelId) {
+        socket.emit('message_edit', { channelId, messageId, content: newContent, updatedAt: newUpdatedAt });
+      }
+    }
   };
 
   const handleThreadMessageDelete = (messageId: string) => {
     removeThreadMessage(messageId);
+    // Broadcast to other subscribers
+    if (socket) {
+      if (dmConversationId) {
+        socket.emit('dm_message_delete', { conversationId: dmConversationId, messageId });
+      } else if (channelId) {
+        socket.emit('message_delete', { channelId, messageId });
+      }
+    }
   };
 
   const rootMsg = threadMessages[0] ?? selectedMessage;

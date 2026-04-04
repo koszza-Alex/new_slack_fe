@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-   allowedDevOrigins: ['192.168.137.106'],
+   allowedDevOrigins: ['192.168.137.98'],
   /* config options here */
     webpack: (config) => {
     config.cache = false;
