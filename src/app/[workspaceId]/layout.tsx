@@ -70,7 +70,7 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
         ) : (
           <>
             {/* Channel route: children = ChannelList sidebar, MainPage = chat area */}
-            <div className="flex-grow h-full">
+            <div className="flex grow h-full">
               {children}
             </div>
 
