@@ -1,52 +1,86 @@
 "use client";
 
 import WorkspaceAvatar from "@/components/WorkSpace/WorkspaceAvatar";
-
 import NavItem from "@/components/WorkSpace/NavItem";
-// import UserTooltip from "@/components/WorkSpace/UserTooltip";
 import CreateMenu from "@/components/WorkSpace/CreateMenu";
 import WorkspaceMenu from "@/components/WorkSpace/WorkspaceMenu";
 import { useSocket } from "@/providers/SocketProvider";
 import { useSidebarStore } from "@/store/sidebar-store";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+
 export const WorkSpace = (props: { userData: any }) => {
     const { socket } = useSocket();
-    const { next, prev } = useSidebarStore();
-    const [userstate, setUserState] = useState([]);
-    useEffect(()=>setUserState(props.userData),[props])
-    // ======================= KEYBOARD NAVIGATION (Slack-like)===================
+    const { next, prev, incrementUnread, clearUnread, active } = useSidebarStore();
+    const [userstate, setUserState] = useState<any>(null);
+    const pathname = usePathname();
+
+    useEffect(() => {
+        if (props.userData) setUserState(props.userData);
+    }, [props.userData]);
+
+    // Clear unread for the currently active section when the user is on it
+    useEffect(() => {
+        if (pathname?.includes("/dm/")) {
+            clearUnread("dms");
+        } else if (pathname?.match(/\/[^/]+\/[^/]+/)) {
+            // On a channel page
+            clearUnread("home");
+        }
+    }, [pathname, clearUnread]);
+
+    // Keyboard navigation
     useEffect(() => {
         const handleKey = (e: KeyboardEvent) => {
             if (e.key === "ArrowDown") next();
             if (e.key === "ArrowUp") prev();
         };
-
         window.addEventListener("keydown", handleKey);
         return () => window.removeEventListener("keydown", handleKey);
     }, [next, prev]);
 
-    // ==============================socket========================================
+    // Socket: profile updates + unread badge increments
     useEffect(() => {
         if (!socket) return;
 
-        socket.on("updated_profile", (data) => {
-            setUserState(data)
+        socket.on("updated_profile", (data: any) => {
+            // Only update this user's state if the event is for the current user
+            if (data?.userId && props.userData?.id && data.userId === props.userData.id) {
+                setUserState((prev: any) => prev ? { ...prev, dispname: data.dispname, avatar: data.avatar } : prev);
+            }
+        });
+
+        // New channel message → increment "home" badge if user is not on a channel page
+        socket.on("new_message", () => {
+            if (!pathname?.match(/\/[^/]+\/[^/]+/) || pathname?.includes("/dm/")) {
+                incrementUnread("home");
+            }
+        });
+
+        // New DM message → increment "dms" badge if user is not on a DM page
+        socket.on("new_dm_message", () => {
+            if (!pathname?.includes("/dm/")) {
+                incrementUnread("dms");
+            }
         });
 
         return () => {
-            socket.off("update_profile");
+            socket.off("updated_profile");
+            socket.off("new_message");
+            socket.off("new_dm_message");
         };
-    }, [socket]);
-    // ===========================================================================
+    }, [socket, pathname, incrementUnread]);
+
     return (
-        <div className="w-[75px] min-w-[75px]  bg-gradient-to-b from-[#4A154B] to-[#3F0E40] flex flex-col items-center py-2">
-            {/* Workspace */}
-            <div className="w-10 h-10 text-[22px] cursor-pointer rounded-xl bg-[#867688] flex items-center justify-center font-medium mb-3">
+        <div className="w-[75px] min-w-[75px] bg-gradient-to-b from-[#3F0E40] to-[#4A154B] flex flex-col items-center py-2">
+            {/* Workspace avatar — shows first letter of workspace name */}
+            <div className="mb-3">
                 <WorkspaceAvatar userData={props.userData} />
             </div>
 
             <div className="flex flex-col items-center gap-4 mt-2">
-                <NavItem id="home" label="Home" hasDot />
+                {/* hasDot removed — badge is now driven by real unread count in the store */}
+                <NavItem id="home" label="Home" />
                 <NavItem id="dms" label="DMs" />
                 <NavItem id="activity" label="Activity" />
                 <NavItem id="files" label="Files" />
@@ -54,15 +88,9 @@ export const WorkSpace = (props: { userData: any }) => {
             </div>
 
             {/* Bottom */}
-            <div className="mt-auto flex flex-col items-center gap-4 bt-[40px]">
-                {/* <UserTooltip name="Create new"> */}
-                {/* <CreateButton /> */}
-
+            <div className="mt-auto flex flex-col items-center gap-4">
                 <CreateMenu />
-
-                {/* <UserTooltip name="koszza"> */}
                 <WorkspaceMenu userData={userstate} />
-                {/* </UserTooltip> */}
             </div>
         </div>
     );

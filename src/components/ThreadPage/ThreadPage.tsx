@@ -3,11 +3,11 @@
 import { useSocket } from "@/providers/SocketProvider";
 import { useThreadStore } from "@/store/thread-store";
 import { ReactionView } from "@/lib/api/reactions";
+import { toggleDmReaction } from "@/lib/api/dm";
 import MessageEditor from "@/components/ui/messageEditor/MessageEditor";
 import { useEffect, useRef } from "react";
 import { FaEllipsisH, FaRegWindowMaximize, FaTimes } from "react-icons/fa";
 import SlackMessage from "../ui/message/Message";
-
 interface UserData {
   id: string;
   dispname?: string | null;
@@ -17,13 +17,26 @@ interface UserData {
 interface ThreadProps {
   onCloseThread: () => void;
   userData: UserData | null;
-  channelId: string;
+  /** Set when the thread belongs to a channel conversation */
+  channelId?: string;
+  /** Set when the thread belongs to a DM conversation */
+  dmConversationId?: string;
+  /** Required in DM mode to call the DM reaction endpoint */
+  workspaceId?: string;
+  /** DM-specific edit override — returns updatedAt on success */
+  onDmEditSave?: (messageId: string, content: string) => Promise<string>;
+  /** DM-specific delete override */
+  onDmDeleteConfirm?: (messageId: string) => Promise<void>;
 }
 
 export const Thread: React.FC<ThreadProps> = ({
   onCloseThread,
   userData,
   channelId,
+  dmConversationId,
+  workspaceId,
+  onDmEditSave,
+  onDmDeleteConfirm,
 }) => {
   const { socket } = useSocket();
   const {
@@ -32,6 +45,8 @@ export const Thread: React.FC<ThreadProps> = ({
     isLoading,
     appendThreadMessage,
     updateThreadMessageReactions,
+    updateThreadMessageContent,
+    removeThreadMessage,
   } = useThreadStore();
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -46,18 +61,20 @@ export const Thread: React.FC<ThreadProps> = ({
       }
     };
 
-    // Sync reaction updates that arrive via socket for any message in this thread
     const handleReactionUpdated = (payload: { messageId: string; reactions: ReactionView[] }) => {
       updateThreadMessageReactions(payload.messageId, payload.reactions);
     };
 
-    socket.on("new_thread_message", handleNewThreadMessage);
-    socket.on("reaction_updated", handleReactionUpdated);
+    const threadEvent = dmConversationId ? "new_dm_thread_message" : "new_thread_message";
+    const reactionEvent = dmConversationId ? "dm_reaction_updated" : "reaction_updated";
+
+    socket.on(threadEvent, handleNewThreadMessage);
+    socket.on(reactionEvent, handleReactionUpdated);
     return () => {
-      socket.off("new_thread_message", handleNewThreadMessage);
-      socket.off("reaction_updated", handleReactionUpdated);
+      socket.off(threadEvent, handleNewThreadMessage);
+      socket.off(reactionEvent, handleReactionUpdated);
     };
-  }, [socket, selectedMessage, appendThreadMessage, updateThreadMessageReactions]);
+  }, [socket, selectedMessage, dmConversationId, appendThreadMessage, updateThreadMessageReactions]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -68,11 +85,36 @@ export const Thread: React.FC<ThreadProps> = ({
 
   const getDisplayName = (sender: any) => sender?.dispname || "Slack_User";
 
-  const handleReactionUpdate = (messageId: string, reactions: ReactionView[]) => {
+  // Channel reaction handler — used when channelId is set
+  const handleChannelReactionUpdate = (messageId: string, reactions: ReactionView[]) => {
     updateThreadMessageReactions(messageId, reactions);
     if (socket && channelId) {
       socket.emit("toggle_reaction", { channelId, messageId, reactions });
     }
+  };
+
+  // DM reaction handler — called from onDmReactionSelect in SlackMessage
+  const handleDmReactionSelect = async (messageId: string, emoji: string) => {
+    if (!userData?.id || !workspaceId || !dmConversationId) return;
+    try {
+      const result = await toggleDmReaction(workspaceId, dmConversationId, messageId, emoji, userData.id);
+      updateThreadMessageReactions(messageId, result.reactions);
+      socket?.emit("toggle_dm_reaction", {
+        conversationId: dmConversationId,
+        messageId,
+        reactions: result.reactions,
+      });
+    } catch (err) {
+      console.error("Failed to toggle DM thread reaction:", err);
+    }
+  };
+
+  const handleThreadMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
+    updateThreadMessageContent(messageId, newContent, newUpdatedAt);
+  };
+
+  const handleThreadMessageDelete = (messageId: string) => {
+    removeThreadMessage(messageId);
   };
 
   const rootMsg = threadMessages[0] ?? selectedMessage;
@@ -104,16 +146,26 @@ export const Thread: React.FC<ThreadProps> = ({
                 avatar={getAvatarUrl(rootMsg.sender)}
                 username={getDisplayName(rootMsg.sender)}
                 time={rootMsg.createdAt}
+                createdAt={rootMsg.createdAt}
+                updatedAt={rootMsg.updatedAt}
                 text={rootMsg.content}
                 files={[]}
                 reactions={rootMsg.reactions ?? []}
                 replies={0}
                 lastReply=""
                 messageId={rootMsg.id}
-                channelId={channelId}
+                channelId={channelId ?? ""}
                 currentUserId={userData?.id ?? null}
+                senderId={rootMsg.sender?.id}
                 onCommentClick={() => {}}
-                onReactionUpdate={handleReactionUpdate}
+                onReactionUpdate={handleChannelReactionUpdate}
+                onDmReactionSelect={dmConversationId
+                  ? (emoji) => handleDmReactionSelect(rootMsg.id, emoji)
+                  : undefined}
+                onMessageUpdate={handleThreadMessageUpdate}
+                onMessageDelete={handleThreadMessageDelete}
+                onEditSave={onDmEditSave}
+                onDeleteConfirm={onDmDeleteConfirm}
               />
             )}
 
@@ -133,16 +185,26 @@ export const Thread: React.FC<ThreadProps> = ({
                 avatar={getAvatarUrl(reply.sender)}
                 username={getDisplayName(reply.sender)}
                 time={reply.createdAt}
+                createdAt={reply.createdAt}
+                updatedAt={reply.updatedAt}
                 text={reply.content}
                 files={[]}
                 reactions={reply.reactions ?? []}
                 replies={0}
                 lastReply=""
                 messageId={reply.id}
-                channelId={channelId}
+                channelId={channelId ?? ""}
                 currentUserId={userData?.id ?? null}
+                senderId={reply.sender?.id}
                 onCommentClick={() => {}}
-                onReactionUpdate={handleReactionUpdate}
+                onReactionUpdate={handleChannelReactionUpdate}
+                onDmReactionSelect={dmConversationId
+                  ? (emoji) => handleDmReactionSelect(reply.id, emoji)
+                  : undefined}
+                onMessageUpdate={handleThreadMessageUpdate}
+                onMessageDelete={handleThreadMessageDelete}
+                onEditSave={onDmEditSave}
+                onDeleteConfirm={onDmDeleteConfirm}
               />
             ))}
 
@@ -162,6 +224,7 @@ export const Thread: React.FC<ThreadProps> = ({
         <MessageEditor
           userData={userData}
           parentMessageId={selectedMessage?.id ?? null}
+          dmConversationId={dmConversationId ?? null}
           placeholder="Reply in thread..."
         />
       </div>

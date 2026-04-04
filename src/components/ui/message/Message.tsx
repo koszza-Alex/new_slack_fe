@@ -3,7 +3,7 @@
 import { toggleReaction, ReactionView } from '@/lib/api/reactions';
 import DOMPurify from 'dompurify';
 import dynamic from "next/dynamic";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   FaEllipsisV,
   FaRegBookmark,
@@ -13,6 +13,13 @@ import {
 import { LuSmilePlus } from "react-icons/lu";
 import { PiListStarBold } from "react-icons/pi";
 
+/** Stable keys for the three custom image-based emoticons */
+const IMAGE_EMOTICONS: Record<string, string> = {
+  tick: "/emoticons/tick.png",
+  eye: "/emoticons/eye.png",
+  welcome: "/emoticons/welcome.png",
+};
+
 const EmojiPicker = dynamic(() => import("../emoji-picker/EmojiPicker"), { ssr: false });
 
 interface FileItem {
@@ -21,29 +28,59 @@ interface FileItem {
 }
 
 interface SlackMessageProps {
+  id?: string;
   state: string;
   avatar: string;
   username: string;
   time: string;
+  /** ISO string — used with createdAt to detect edited state */
+  updatedAt?: string;
+  /** ISO string — used with updatedAt to detect edited state */
+  createdAt?: string;
   text: string;
   files: FileItem[];
-  /** All reactions for this message — one entry per emoji type */
   reactions: ReactionView[];
   replies: number;
   lastReply: string;
   messageId: string;
   channelId: string;
   currentUserId: string | null;
+  /** The id of the user who sent this message — used to gate the action menu */
+  senderId?: string;
   onCommentClick: () => void;
-  /** Called after a successful reaction toggle with the full updated reactions array */
   onReactionUpdate: (messageId: string, reactions: ReactionView[]) => void;
+  /** Called after a successful edit so the parent can update its list */
+  onMessageUpdate?: (messageId: string, newContent: string, updatedAt: string) => void;
+  /** Called after a successful delete so the parent can remove it from its list */
+  onMessageDelete?: (messageId: string) => void;
+  /**
+   * When provided, replaces the internal channel PATCH fetch for edit.
+   * Used in DM context where the endpoint is different.
+   * Must return the updatedAt ISO string on success, or throw on failure.
+   */
+  onEditSave?: (messageId: string, content: string) => Promise<string>;
+  /**
+   * When provided, replaces the internal channel DELETE fetch.
+   * Used in DM context where the endpoint is different.
+   */
+  onDeleteConfirm?: (messageId: string) => Promise<void>;
+  /** Hide the thread/reply button — used in DM mode where threads don't apply */
+  hideThreadButton?: boolean;
+  /**
+   * When set, emoji selection calls this instead of the channel toggleReaction API.
+   * Used in DM mode where reactions go through a different endpoint.
+   */
+  onDmReactionSelect?: (emoji: string) => void;
 }
 
 export const SlackMessage: React.FC<SlackMessageProps> = ({
+  id,
   state,
   avatar,
   username,
   time,
+  updatedAt,
+  createdAt,
   text,
   files,
   reactions,
@@ -52,34 +89,171 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
   messageId,
   channelId,
   currentUserId,
+  senderId,
   onCommentClick,
   onReactionUpdate,
+  onMessageUpdate,
+  onMessageDelete,
+  onEditSave,
+  onDeleteConfirm,
+  hideThreadButton = false,
+  onDmReactionSelect,
 }) => {
   const [showToolbar, setShowToolbar] = useState(false);
   const [showFiles, setShowFiles] = useState(true);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
   const [downloadTxt, setDownloadTxt] = useState('');
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isPending, setIsPending] = useState(false);
 
-  /**
-   * Toggle a specific emoji for the current user.
-   * Works for both picker selection (new emoji) and pill click (existing emoji).
-   */
+  // Action menu (Edit / Delete) — only for own messages
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
+
+  // Inline edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(text);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const emojiBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // Whether the current user is the sender of this message
+  const isOwnMessage = !!currentUserId && !!senderId && currentUserId === senderId;
+
+  // Whether this message has been edited (updatedAt meaningfully later than createdAt)
+  const isEdited = !!updatedAt && !!createdAt &&
+    new Date(updatedAt).getTime() - new Date(createdAt).getTime() > 2000;
+
+  /** Strip HTML tags to get plain text for the edit textarea */
+  const toPlainText = (html: string): string => {
+    if (typeof window === "undefined") return html.replace(/<[^>]*>/g, "");
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    return div.textContent ?? div.innerText ?? "";
+  };
+
+  // Close action menu on outside click
+  useEffect(() => {
+    if (!showActionMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
+        setShowActionMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showActionMenu]);
+
   const handleEmojiSelect = async (emoji: string) => {
-    if (!messageId || !emoji || !currentUserId || !channelId) return;
+    if (!messageId || !emoji || !currentUserId) return;
     if (isPending) return;
 
-    setShowEmojiPicker(false);
-    setIsPending(true);
+    setShowEmoji(false);
 
+    // DM mode — delegate to parent handler which calls the DM reaction endpoint
+    if (onDmReactionSelect) {
+      onDmReactionSelect(emoji);
+      return;
+    }
+
+    // Channel mode — requires channelId
+    if (!channelId) return;
+
+    setIsPending(true);
     try {
       const result = await toggleReaction(channelId, messageId, emoji, currentUserId);
-      // result.reactions is the authoritative full array from the backend
       onReactionUpdate(result.messageId, result.reactions);
     } catch (err) {
       console.error("Failed to toggle reaction:", err);
     } finally {
       setIsPending(false);
+    }
+  };
+
+  const handleEmojiClick = () => {
+    if (!emojiBtnRef.current) return;
+
+    const rect = emojiBtnRef.current.getBoundingClientRect();
+    const pickerWidth = 320;
+    const pickerHeight = 400;
+    const offset = 8;
+
+    let top: number;
+    let left = rect.left;
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    if (spaceBelow >= pickerHeight + offset) {
+      top = rect.bottom + offset;
+    } else if (spaceAbove >= pickerHeight + offset) {
+      top = rect.top - pickerHeight - offset - 34;
+    } else {
+      top = Math.max(offset, window.innerHeight - pickerHeight - offset);
+    }
+
+    if (window.innerWidth - rect.left < pickerWidth) {
+      left = rect.right - pickerWidth;
+    }
+    if (left < offset) left = offset;
+
+    setPickerStyle({ position: "fixed", top: `${top}px`, left: `${left}px`, zIndex: 9999 });
+    setShowEmoji((v) => !v);
+  };
+
+  const handleEditSave = async () => {
+    const trimmed = editContent.trim();
+    if (!trimmed || !messageId) return;
+    setIsSavingEdit(true);
+    try {
+      let newUpdatedAt: string;
+      if (onEditSave) {
+        // DM (or other) context provides its own fetch
+        newUpdatedAt = await onEditSave(messageId, trimmed);
+      } else {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/channels/${channelId}/messages/${messageId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify({ content: trimmed, senderId: currentUserId }),
+          },
+        );
+        if (!res.ok) throw new Error("Failed to update message");
+        const data = await res.json();
+        newUpdatedAt = data?.updatedAt ?? new Date().toISOString();
+      }
+      onMessageUpdate?.(messageId, trimmed, newUpdatedAt);
+      setIsEditing(false);
+    } catch (err) {
+      console.error("Edit failed:", err);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!messageId) return;
+    setShowActionMenu(false);
+    try {
+      if (onDeleteConfirm) {
+        await onDeleteConfirm(messageId);
+      } else {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/channels/${channelId}/messages/${messageId}`,
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify({ senderId: currentUserId }),
+          },
+        );
+        if (!res.ok) throw new Error("Failed to delete message");
+      }
+      onMessageDelete?.(messageId);
+    } catch (err) {
+      console.error("Delete failed:", err);
     }
   };
 
@@ -89,58 +263,44 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
   const formatTime = (isoString: string) => {
     const date = new Date(isoString);
     return date
-      .toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      })
+      .toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
       .replace(":", ".");
   };
 
   return (
     <div
+      id={id}
       className="relative flex gap-3 px-[25px] py-2 bg-white text-gray-500 hover:bg-gray-100 w-full"
       onMouseOver={() => setShowToolbar(true)}
       onMouseLeave={() => {
         setShowToolbar(false);
-        setShowEmojiPicker(false);
+        setShowEmoji(false);
       }}
     >
       {/* Hover toolbar */}
       {state !== "search" && showToolbar && (
         <div className="absolute right-4 top-[-20px] flex items-center bg-white border border-gray-200 rounded-xl shadow-sm px-2 py-1 z-11">
-          <img src="/emoticons/tick.png" className="p-1 rounded-md hover:bg-gray-100" />
-          <img src="/emoticons/eye.png" className="p-1 rounded-md hover:bg-gray-100" />
-          <img src="/emoticons/welcome.png" className="p-1 rounded-md hover:bg-gray-100" />
+          <img src="/emoticons/tick.png" className="p-1 rounded-md hover:bg-gray-100 cursor-pointer" onClick={() => handleEmojiSelect("tick")} />
+          <img src="/emoticons/eye.png" className="p-1 rounded-md hover:bg-gray-100 cursor-pointer" onClick={() => handleEmojiSelect("eye")} />
+          <img src="/emoticons/welcome.png" className="p-1 rounded-md hover:bg-gray-100 cursor-pointer" onClick={() => handleEmojiSelect("welcome")} />
 
           <div className="w-px h-5 bg-gray-200 mx-1" />
 
-          {/* Emoji picker trigger — wrapped in relative so the picker anchors to it */}
-          <div className="relative">
-            <button
-              className="p-1.5 rounded-md hover:bg-gray-100"
-              onClick={() => setShowEmojiPicker((v) => !v)}
-              disabled={isPending}
-            >
-              <LuSmilePlus />
-            </button>
+          <button
+            ref={emojiBtnRef}
+            className="p-1.5 rounded-md hover:bg-gray-100"
+            onClick={handleEmojiClick}
+            disabled={isPending}
+          >
+            <LuSmilePlus />
+          </button>
 
-            {/* Picker opens below-right of the trigger button, above all other UI */}
-            {showEmojiPicker && (
-              <div className="absolute top-full right-[-130px] mt-1 z-50">
-                <EmojiPicker onSelect={handleEmojiSelect} />
-              </div>
-            )}
-          </div>
-
-          {state === "message" && (
-            <button
-              className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"
-              onClick={onCommentClick}
-            >
+          {state === "message" && !hideThreadButton && (
+            <button className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100" onClick={onCommentClick}>
               <FaRegCommentDots />
             </button>
           )}
+
           <button className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100">
             <FaRegShareSquare />
           </button>
@@ -150,31 +310,90 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
           <button className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100">
             <PiListStarBold />
           </button>
-          <button className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100">
-            <FaEllipsisV />
-          </button>
+
+          {/* FaEllipsisV — opens action menu only for own messages */}
+          <div className="relative" ref={isOwnMessage ? actionMenuRef : undefined}>
+            <button
+              className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"
+              onClick={() => {
+                if (!isOwnMessage) return;
+                setShowActionMenu((v) => !v);
+              }}
+            >
+              <FaEllipsisV />
+            </button>
+
+            {isOwnMessage && showActionMenu && (
+              <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                <button
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => {
+                    setEditContent(toPlainText(text));
+                    setIsEditing(true);
+                    setShowActionMenu(false);
+                  }}
+                >
+                  Edit message
+                </button>
+                <button
+                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                  onClick={handleDelete}
+                >
+                  Delete message
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* Avatar */}
-      <img
-        src={avatar}
-        className="w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center"
-      />
+      <img src={avatar} className="w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center" />
 
       {/* Content */}
       <div className="flex-1 w-full">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-900 hover:underline cursor-pointer">
-            {username}
-          </span>
+          <span className="font-semibold text-gray-900 hover:underline cursor-pointer">{username}</span>
           <span className="text-sm text-gray-500">{formatTime(time)}</span>
+          {isEdited && <span className="text-xs text-gray-400 italic">(edited)</span>}
         </div>
 
-        <div
-          className="text-gray-800 mt-1"
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(text) }}
-        />
+        {/* Inline edit mode */}
+        {isEditing ? (
+          <div className="mt-1">
+            <textarea
+              className="w-full border border-blue-400 rounded-md px-3 py-2 text-sm text-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+              rows={3}
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleEditSave(); }
+                if (e.key === "Escape") { setIsEditing(false); setEditContent(text); }
+              }}
+              autoFocus
+            />
+            <div className="flex gap-2 mt-1">
+              <button
+                className="px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                onClick={handleEditSave}
+                disabled={isSavingEdit || !editContent.trim()}
+              >
+                {isSavingEdit ? "Saving…" : "Save"}
+              </button>
+              <button
+                className="px-3 py-1 text-xs bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200"
+                onClick={() => { setIsEditing(false); setEditContent(text); }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="text-gray-800 mt-1"
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(text) }}
+          />
+        )}
 
         {state !== "search" && (
           <div>
@@ -182,17 +401,12 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
             {files && files.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 text-sm text-gray-400 mt-2">
-                  <span
-                    className="cursor-pointer flex items-center gap-1"
-                    onClick={() => setShowFiles(!showFiles)}
-                  >
+                  <span className="cursor-pointer flex items-center gap-1" onClick={() => setShowFiles(!showFiles)}>
                     {files.length} files {showFiles ? "▲" : "▼"}
                   </span>
                   <span
                     className="relative group cursor-pointer"
-                    onMouseOver={() =>
-                      setDownloadTxt(`${files.length} files available to download`)
-                    }
+                    onMouseOver={() => setDownloadTxt(`${files.length} files available to download`)}
                     onMouseLeave={() => setDownloadTxt('')}
                   >
                     Download all
@@ -203,25 +417,13 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                     )}
                   </span>
                 </div>
-                <div
-                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                    showFiles ? "max-h-[500px] opacity-100 mt-3" : "max-h-0 opacity-0"
-                  }`}
-                >
+                <div className={`overflow-hidden transition-all duration-300 ${showFiles ? "max-h-[500px] opacity-100 mt-3" : "max-h-0 opacity-0"}`}>
                   <div className="flex gap-3 flex-wrap">
                     {files.map((file, i) => (
-                      <div
-                        key={i}
-                        style={{ transitionDelay: `${i * 50}ms` }}
-                        className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-white shadow-sm w-[220px]"
-                      >
+                      <div key={i} className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-white shadow-sm w-[220px]">
                         <div className="w-10 h-10 rounded-xl bg-blue-400 flex items-center justify-center text-sm text-white">
                           {isImage(file.type) ? (
-                            <img
-                              src={"/" + file.name}
-                              alt={file.name}
-                              className="w-10 h-10 object-cover rounded-xl"
-                            />
+                            <img src={"/" + file.name} alt={file.name} className="w-10 h-10 object-cover rounded-xl" />
                           ) : (
                             <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white font-semibold uppercase">
                               {file.type?.charAt(0)}
@@ -239,28 +441,25 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
               </div>
             )}
 
-            {/* Multi-reaction pills — one per emoji type, Slack style */}
+            {/* Reactions */}
             {reactions && reactions.length > 0 && (
               <div className="flex gap-1.5 mt-2 flex-wrap items-center">
                 {reactions.map((r) => {
-                  const userReacted =
-                    !!currentUserId && r.reactedUserIds.includes(currentUserId);
+                  const userReacted = !!currentUserId && r.reactedUserIds.includes(currentUserId);
                   return (
                     <button
                       key={r.emoji}
                       onClick={() => handleEmojiSelect(r.emoji)}
                       disabled={isPending}
-                      title={userReacted ? "Remove your reaction" : "Add your reaction"}
-                      className={`flex items-center gap-1 px-2 py-[3px] rounded-full text-xs border transition
-                        ${
-                          userReacted
-                            ? "bg-blue-100 border-blue-500 text-blue-700 font-semibold"
-                            : "bg-blue-50 border-blue-300 text-gray-600 hover:bg-blue-100"
-                        }
-                        ${isPending ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-                      `}
+                      className={`flex items-center gap-1 px-2 py-[3px] rounded-full text-xs border ${
+                        userReacted ? "bg-blue-100 border-blue-500 text-blue-700" : "bg-blue-50 border-blue-300 text-gray-600"
+                      }`}
                     >
-                      <span>{r.emoji}</span>
+                      {IMAGE_EMOTICONS[r.emoji] ? (
+                        <img src={IMAGE_EMOTICONS[r.emoji]} alt={r.emoji} className="w-4 h-4 object-contain" />
+                      ) : (
+                        <span>{r.emoji}</span>
+                      )}
                       <span className="font-bold">{r.count}</span>
                     </button>
                   );
@@ -269,17 +468,10 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
             )}
 
             {/* Replies */}
-            {replies > 0 && state === "message" && (
+            {replies > 0 && state === "message" && !hideThreadButton && (
               <div className="flex items-center gap-2 mt-3 text-sm text-gray-500">
-                <img
-                  src="/avatar.png"
-                  alt="no_avatar"
-                  className="w-[25px] h-[25px] rounded-lg bg-yellow-100"
-                />
-                <span
-                  className="text-blue-600 cursor-pointer hover:underline"
-                  onClick={onCommentClick}
-                >
+                <img src="/avatar.png" className="w-[25px] h-[25px] rounded-lg bg-yellow-100" />
+                <span className="text-blue-600 cursor-pointer hover:underline" onClick={onCommentClick}>
                   {replies} {replies === 1 ? "reply" : "replies"}
                 </span>
                 {lastReply && <span>Last reply {lastReply}</span>}
@@ -289,6 +481,11 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
         )}
       </div>
 
+      {showEmoji && (
+        <div style={pickerStyle}>
+          <EmojiPicker onSelect={handleEmojiSelect} />
+        </div>
+      )}
     </div>
   );
 };

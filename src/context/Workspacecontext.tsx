@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 
 type Workspace = {
   id: string;
@@ -16,6 +16,15 @@ const WorkspaceContext = createContext<WorkspaceContextType | null>(null);
 
 export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+
+  // Rehydrate from localStorage on mount so workspace_name survives page refreshes
+  useEffect(() => {
+    const id = localStorage.getItem("workspaceId");
+    const name = localStorage.getItem("workspaceName");
+    if (id && name) {
+      setWorkspace({ id, name });
+    }
+  }, []);
 
   return (
     <WorkspaceContext.Provider value={{ workspace, setWorkspace }}>

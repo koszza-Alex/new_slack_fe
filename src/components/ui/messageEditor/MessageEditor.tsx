@@ -29,6 +29,8 @@ type MessageEditorProps = {
   userData: { id: string; [key: string]: any } | null;
   // When set, the editor operates in thread-reply mode
   parentMessageId?: string | null;
+  // When set, the editor operates in DM mode — emits send_dm_message instead of send_message
+  dmConversationId?: string | null;
   // Override the placeholder text (e.g. "Reply in thread…")
   placeholder?: string;
   // Called after a message is successfully emitted, with the raw payload
@@ -38,21 +40,40 @@ type MessageEditorProps = {
 export default function MessageEditor({
   userData,
   parentMessageId,
+  dmConversationId,
   placeholder,
   onMessageSent,
 }: MessageEditorProps) {
   const { socket } = useSocket();
 
   const params = useParams();
-  // channelId from URL — used in channel mode; in thread mode it is passed via props
-  // but the thread panel lives inside the same channel route so params still works.
   const channelId = Array.isArray(params.channelId)
     ? params.channelId[0]
     : params.channelId;
 
   const handleSend = async () => {
-    // Common guards: need content, socket, channelId, and an authenticated user
-    if (!editor || isEmpty || !socket || !channelId || !userData?.id) return;
+    if (!editor || isEmpty || !socket || !userData?.id) return;
+
+    // DM mode — requires dmConversationId, no channelId needed
+    if (dmConversationId) {
+      const content = editor.getHTML();
+      const payload: Record<string, unknown> = {
+        conversationId: dmConversationId,
+        senderId: userData.id,
+        content,
+      };
+      // Include parentId if this is a DM thread reply
+      if (parentMessageId?.trim()) {
+        payload.parentId = parentMessageId;
+      }
+      socket.emit("send_dm_message", payload);
+      onMessageSent?.(payload);
+      editor.commands.clearContent();
+      return;
+    }
+
+    // Channel / thread mode — requires channelId
+    if (!channelId) return;
 
     const content = editor.getHTML();
 

@@ -10,8 +10,8 @@ type Props = {
 
 export default function InvitePeopleModal({ open, onClose }: Props) {
     const ref = useRef<HTMLDivElement>(null);
-    const [inviteEmail, setInviteEmail] = useState("")
-    const workspaceName = useSearchParams().get("workspace_name") 
+    const [inviteEmail, setInviteEmail] = useState("");
+    const workspaceName = useSearchParams().get("workspace_name");
 
     useEffect(() => {
         const handleClick = (e: MouseEvent) => {
@@ -34,17 +34,20 @@ export default function InvitePeopleModal({ open, onClose }: Props) {
     }, [open, onClose]);
 
     if (!open) return null;
-    const onSubmit = async() =>{
-        if(!inviteEmail) return alert("input email!")
-        const res = await fetch("http://localhost:1030/api/auth/invited-user", {
+    const onSubmit = async () => {
+        if (!inviteEmail) return alert("input email!");
+        const res = await fetch("http://localhost:5050/api/auth/invited-user", {
             method: "POST",
             headers: {
-              "Content-Type": "application/json",
+                "Content-Type": "application/json",
             },
-            body: JSON.stringify({ email:inviteEmail, workspaceName:workspaceName }),
-          });
-          onClose()                  
-    }
+            body: JSON.stringify({
+                email: inviteEmail,
+                workspaceName: workspaceName,
+            }),
+        });
+        onClose();
+    };
 
     return (
         <div className="fixed inset-0 z-[999] flex items-center justify-center">
@@ -86,12 +89,15 @@ export default function InvitePeopleModal({ open, onClose }: Props) {
                         <input
                             placeholder="name@outlook.com"
                             value={inviteEmail}
-                            onChange={(e)=>{setInviteEmail(e.target.value)}}
+                            onChange={(e) => {
+                                setInviteEmail(e.target.value);
+                            }}
                             className="
                               w-full
                               h-[77px]
                               px-3
                               text-[14px]
+                              text-black
                               border border-gray-300
                               rounded-md
                               outline-none
