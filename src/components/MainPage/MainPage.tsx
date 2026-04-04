@@ -251,8 +251,8 @@ export const MainPage = (props: { userData: any }) => {
         }
     };
 
-    const handleMessageUpdate = (messageId: string, newContent: string) => {
-        setMessages(msg.map((m) => (m.id === messageId ? { ...m, content: newContent } : m)));
+    const handleMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
+        setMessages(msg.map((m) => (m.id === messageId ? { ...m, content: newContent, updatedAt: newUpdatedAt } : m)));
     };
 
     const handleMessageDelete = (messageId: string) => {
@@ -292,6 +292,8 @@ export const MainPage = (props: { userData: any }) => {
                                                 item.sender,
                                             )}
                                             time={item.createdAt}
+                                            createdAt={item.createdAt}
+                                            updatedAt={item.updatedAt}
                                             text={item.content}
                                             messageId={item.id}
                                             channelId={channelId ?? ""}

@@ -175,8 +175,8 @@ export default function DmPage({ conversationId }: DmPageProps) {
         }
     };
 
-    const handleDmMessageUpdate = (messageId: string, newContent: string) => {
-        setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: newContent } : m)));
+    const handleDmMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: newContent, updatedAt: newUpdatedAt } : m)));
     };
 
     const handleDmMessageDelete = (messageId: string) => {
@@ -260,6 +260,8 @@ export default function DmPage({ conversationId }: DmPageProps) {
                                         avatar={getAvatarUrl(item.sender)}
                                         username={getDisplayName(item.sender)}
                                         time={item.createdAt}
+                                        createdAt={item.createdAt}
+                                        updatedAt={item.updatedAt}
                                         text={item.content}
                                         messageId={item.id}
                                         channelId=""

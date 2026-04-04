@@ -33,6 +33,10 @@ interface SlackMessageProps {
   avatar: string;
   username: string;
   time: string;
+  /** ISO string — used with createdAt to detect edited state */
+  updatedAt?: string;
+  /** ISO string — used with updatedAt to detect edited state */
+  createdAt?: string;
   text: string;
   files: FileItem[];
   reactions: ReactionView[];
@@ -46,7 +50,7 @@ interface SlackMessageProps {
   onCommentClick: () => void;
   onReactionUpdate: (messageId: string, reactions: ReactionView[]) => void;
   /** Called after a successful edit so the parent can update its list */
-  onMessageUpdate?: (messageId: string, newContent: string) => void;
+  onMessageUpdate?: (messageId: string, newContent: string, updatedAt: string) => void;
   /** Called after a successful delete so the parent can remove it from its list */
   onMessageDelete?: (messageId: string) => void;
   /** Hide the thread/reply button — used in DM mode where threads don't apply */
@@ -64,6 +68,8 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
   avatar,
   username,
   time,
+  updatedAt,
+  createdAt,
   text,
   files,
   reactions,
@@ -100,6 +106,18 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
 
   // Whether the current user is the sender of this message
   const isOwnMessage = !!currentUserId && !!senderId && currentUserId === senderId;
+
+  // Whether this message has been edited (updatedAt meaningfully later than createdAt)
+  const isEdited = !!updatedAt && !!createdAt &&
+    new Date(updatedAt).getTime() - new Date(createdAt).getTime() > 2000;
+
+  /** Strip HTML tags to get plain text for the edit textarea */
+  const toPlainText = (html: string): string => {
+    if (typeof window === "undefined") return html.replace(/<[^>]*>/g, "");
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    return div.textContent ?? div.innerText ?? "";
+  };
 
   // Close action menu on outside click
   useEffect(() => {
@@ -172,7 +190,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
 
   const handleEditSave = async () => {
     const trimmed = editContent.trim();
-    if (!trimmed || trimmed === text || !messageId) return;
+    if (!trimmed || !messageId) return;
     setIsSavingEdit(true);
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -185,7 +203,9 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
         },
       );
       if (!res.ok) throw new Error("Failed to update message");
-      onMessageUpdate?.(messageId, trimmed);
+      const data = await res.json();
+      const newUpdatedAt: string = data?.updatedAt ?? new Date().toISOString();
+      onMessageUpdate?.(messageId, trimmed, newUpdatedAt);
       setIsEditing(false);
     } catch (err) {
       console.error("Edit failed:", err);
@@ -285,7 +305,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                 <button
                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   onClick={() => {
-                    setEditContent(text);
+                    setEditContent(toPlainText(text));
                     setIsEditing(true);
                     setShowActionMenu(false);
                   }}
@@ -312,6 +332,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
         <div className="flex items-center gap-2">
           <span className="font-semibold text-gray-900 hover:underline cursor-pointer">{username}</span>
           <span className="text-sm text-gray-500">{formatTime(time)}</span>
+          {isEdited && <span className="text-xs text-gray-400 italic">edited</span>}
         </div>
 
         {/* Inline edit mode */}
@@ -332,7 +353,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
               <button
                 className="px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                 onClick={handleEditSave}
-                disabled={isSavingEdit || !editContent.trim() || editContent.trim() === text}
+                disabled={isSavingEdit || !editContent.trim()}
               >
                 {isSavingEdit ? "Saving…" : "Save"}
               </button>
