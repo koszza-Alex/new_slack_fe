@@ -84,17 +84,15 @@ export default function ProfileSidebar({ open, onClose, userdata }: Props) {
         if (!socket) return;
 
         const handleProfileUpdated = (payload: {
-            id: string;
+            id?: string;
+            userId?: string;
             name?: string;
             dispname?: string;
             avatar?: string;
         }) => {
-            // console.log("📡 profile:updated", payload);
-
+            const updatedId = payload.id ?? payload.userId;
             setUser((prev) => {
-                if (!prev) return prev;
-                if (prev.id !== payload.id) return prev;
-
+                if (!prev || prev.id !== updatedId) return prev;
                 return {
                     ...prev,
                     name: payload.name ?? prev.name,
@@ -104,10 +102,14 @@ export default function ProfileSidebar({ open, onClose, userdata }: Props) {
             });
         };
 
+        // Listen to both event names — backend emits "updated_profile",
+        // some paths emit "profile:updated"
         socket.on("profile:updated", handleProfileUpdated);
+        socket.on("updated_profile", handleProfileUpdated);
 
         return () => {
             socket.off("profile:updated", handleProfileUpdated);
+            socket.off("updated_profile", handleProfileUpdated);
         };
     }, [socket]);
 
@@ -288,7 +290,7 @@ export default function ProfileSidebar({ open, onClose, userdata }: Props) {
                                 <div className="relative w-[280px] h-[280px] rounded-xl overflow-hidden bg-[#7B2B8F] group">
                                     {user?.avatar ? (
                                         <img
-                                            src={`${process.env.NEXT_PUBLIC_SOCKET_URL}${userdata?.avatar}`}
+                                            src={`${process.env.NEXT_PUBLIC_SOCKET_URL}${user.avatar}`}
                                             className="w-full h-full object-cover"
                                         />
                                     ) : (
