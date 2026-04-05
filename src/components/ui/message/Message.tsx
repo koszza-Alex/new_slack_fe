@@ -25,6 +25,8 @@ const EmojiPicker = dynamic(() => import("../emoji-picker/EmojiPicker"), { ssr: 
 interface FileItem {
   name: string;
   type: string;
+  /** Server path — e.g. /uploads/uuid.png */
+  path?: string;
 }
 
 interface SlackMessageProps {
@@ -106,6 +108,8 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
   const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
   const [downloadTxt, setDownloadTxt] = useState('');
   const [isPending, setIsPending] = useState(false);
+  /** URL of the image currently shown in the lightbox modal (null = closed) */
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // Action menu (Edit / Delete) — only for own messages
   const [showActionMenu, setShowActionMenu] = useState(false);
@@ -407,12 +411,26 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
               <div>
                 <div className="flex items-center gap-2 text-sm text-gray-400 mt-2">
                   <span className="cursor-pointer flex items-center gap-1" onClick={() => setShowFiles(!showFiles)}>
-                    {files.length} files {showFiles ? "▲" : "▼"}
+                    {files.length} {files.length === 1 ? "file" : "files"} {showFiles ? "▲" : "▼"}
                   </span>
-                  <span
-                    className="relative group cursor-pointer"
+                  <a
+                    className="relative group cursor-pointer hover:underline"
                     onMouseOver={() => setDownloadTxt(`${files.length} files available to download`)}
                     onMouseLeave={() => setDownloadTxt('')}
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      files.forEach((file) => {
+                        const url = file.path
+                          ? `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}${file.path}`
+                          : `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}/${file.name}`;
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = file.name;
+                        a.target = "_blank";
+                        a.click();
+                      });
+                    }}
                   >
                     Download all
                     {downloadTxt && (
@@ -420,27 +438,51 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                         {downloadTxt}
                       </span>
                     )}
-                  </span>
+                  </a>
                 </div>
                 <div className={`overflow-hidden transition-all duration-300 ${showFiles ? "max-h-[500px] opacity-100 mt-3" : "max-h-0 opacity-0"}`}>
                   <div className="flex gap-3 flex-wrap">
-                    {files.map((file, i) => (
-                      <div key={i} className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-white shadow-sm w-[220px]">
-                        <div className="w-10 h-10 rounded-xl bg-blue-400 flex items-center justify-center text-sm text-white">
-                          {isImage(file.type) ? (
-                            <img src={"/" + file.name} alt={file.name} className="w-10 h-10 object-cover rounded-xl" />
-                          ) : (
-                            <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white font-semibold uppercase">
-                              {file.type?.charAt(0)}
-                            </div>
-                          )}
+                    {files.map((file, i) => {
+                      const fileUrl = file.path
+                        ? `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}${file.path}`
+                        : `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}/${file.name}`;
+                      const img = isImage(file.type);
+                      return (
+                        <div
+                          key={i}
+                          className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-white shadow-sm w-[220px] hover:bg-gray-50 transition cursor-pointer"
+                          onClick={() => img ? setLightboxUrl(fileUrl) : undefined}
+                        >
+                          {/* Thumbnail / icon */}
+                          <div className="w-10 h-10 rounded-xl bg-blue-400 flex items-center justify-center text-sm text-white shrink-0 overflow-hidden">
+                            {img ? (
+                              <img src={fileUrl} alt={file.name} className="w-10 h-10 object-cover rounded-xl" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white font-semibold uppercase">
+                                {(file.type ?? "?").charAt(0)}
+                              </div>
+                            )}
+                          </div>
+                          {/* Name + type */}
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="text-sm font-bold text-gray-900 truncate">{file.name}</span>
+                            <span className="text-xs text-gray-500">{file.type}</span>
+                          </div>
+                          {/* Download button — always visible */}
+                          <a
+                            href={fileUrl}
+                            download={file.name}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="shrink-0 p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-700 transition"
+                            title="Download"
+                          >
+                            ↓
+                          </a>
                         </div>
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-gray-900">{file.name}</span>
-                          <span className="text-xs text-gray-500">{file.type}</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -489,6 +531,29 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
       {showEmoji && (
         <div style={pickerStyle}>
           <EmojiPicker onSelect={handleEmojiSelect} />
+        </div>
+      )}
+
+      {/* Image lightbox modal */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={lightboxUrl}
+              alt="Preview"
+              className="max-w-[90vw] max-h-[90vh] rounded-lg object-contain shadow-2xl"
+            />
+            <button
+              onClick={() => setLightboxUrl(null)}
+              className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center text-lg hover:bg-black/80 transition"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
     </div>

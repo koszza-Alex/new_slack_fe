@@ -11,6 +11,7 @@ export interface ThreadMessage {
   replyCount: number;
   lastReplyAt: string | null;
   reactions: ReactionView[];
+  files?: { id: string; name: string; type: string; path: string; size: number }[];
   sender: {
     id: string;
     dispname: string | null;

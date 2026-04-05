@@ -52,15 +52,42 @@ export default function MessageEditor({
     : params.channelId;
 
   const handleSend = async () => {
-    if (!editor || isEmpty || !socket || !userData?.id) return;
+    if (!editor || !socket || !userData?.id) return;
+    // Allow send if there's text OR files attached
+    if (isEmpty && selectedFiles.length === 0) return;
 
     // DM mode — requires dmConversationId, no channelId needed
     if (dmConversationId) {
       const content = editor.getHTML();
+
+      // Upload any selected files first
+      let fileIds: string[] = [];
+      if (selectedFiles.length > 0) {
+        const formData = new FormData();
+        selectedFiles.forEach((entry) => formData.append("files", entry.file));
+        try {
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/files`,
+            { method: "POST", body: formData },
+          );
+          if (res.ok) {
+            const data = await res.json();
+            fileIds = (Array.isArray(data) ? data : data.files ?? []).map(
+              (f: any) => f.id ?? f,
+            );
+          }
+        } catch (err) {
+          console.error("File upload failed:", err);
+        }
+        selectedFiles.forEach((e) => { if (e.preview) URL.revokeObjectURL(e.preview); });
+        setSelectedFiles([]);
+      }
+
       const payload: Record<string, unknown> = {
         conversationId: dmConversationId,
         senderId: userData.id,
         content,
+        fileIds,
       };
       // Include parentId if this is a DM thread reply
       if (parentMessageId?.trim()) {
@@ -338,10 +365,9 @@ export default function MessageEditor({
 
         {/* Message send ✈*/}
         <button
-          // disabled={isEmpty}
           className={`
                      flex items-center gap-1 px-2 rounded-md text-sm h-7 transition
-                      ${isEmpty
+                      ${isEmpty && selectedFiles.length === 0
               ? "bg-gray-200 text-gray-400 cursor-not-allowed"
               : "bg-green-800 text-white hover:bg-green-700"
             }
