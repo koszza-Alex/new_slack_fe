@@ -82,19 +82,8 @@ body {
   100% {
     transform: scale(0);
   }
+
   40% {
     transform: scale(1);
-  }
-}
-.mascot-container:hover .mascot-sprite {
-  animation: mascot-play 0.4s steps(5) forwards;
-}
-
-@keyframes mascot-play {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: -100px 0;
   }
 }

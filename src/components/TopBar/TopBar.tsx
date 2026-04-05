@@ -9,7 +9,6 @@ import {
   FiSearch,
 } from "react-icons/fi";
 import SearchBox from "./SearchBox";
-import TopBarIcon from "./TopBarIcon";
 // import SearchModal from "./SearchModal";
 
 export default function TopBar() {
@@ -38,7 +37,7 @@ export default function TopBar() {
         <FiClock size={18} className="text-white/90" />
       </IconBtn>
     </div>
-        <TopBarIcon />
+        <SearchBox />
       </div>
 
       {/* RIGHT */}
