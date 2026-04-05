@@ -203,10 +203,19 @@ export default function DmPage({ conversationId }: DmPageProps) {
         socket?.emit('dm_message_edit', { conversationId, messageId, content: newContent, updatedAt: newUpdatedAt });
     };
 
-    const handleDmMessageDelete = (messageId: string) => {
-        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    const handleDmMessageDelete = (messageId: string, updatedRoot?: any) => {
+        // Filter out the deleted message and optionally update the root's replyCount in one pass
+        setMessages((prev) => prev.filter((m) => m.id !== messageId).map((m) =>
+            updatedRoot && m.id === updatedRoot.id
+                ? { ...m, replyCount: updatedRoot.replyCount, lastReplyAt: updatedRoot.lastReplyAt }
+                : m
+        ));
         // Broadcast deletion to other subscribers in this DM conversation
-        socket?.emit('dm_message_delete', { conversationId, messageId });
+        socket?.emit('dm_message_delete', { conversationId, messageId, updatedRoot });
+        // Update the thread store's root message replyCount for the deleting client
+        if (updatedRoot) {
+            updateRootMessage(updatedRoot as any);
+        }
     };
 
     /** DM-specific edit fetch — returns updatedAt on success */
@@ -225,8 +234,8 @@ export default function DmPage({ conversationId }: DmPageProps) {
         return data?.updatedAt ?? new Date().toISOString();
     };
 
-    /** DM-specific delete fetch */
-    const dmDeleteConfirm = async (messageId: string): Promise<void> => {
+    /** DM-specific delete fetch — returns updatedRoot if the deleted message was a reply */
+    const dmDeleteConfirm = async (messageId: string): Promise<{ updatedRoot: any | null }> => {
         const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const res = await fetch(
             `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/workspaces/${workspaceId}/dm/conversations/${conversationId}/messages/${messageId}`,
@@ -237,6 +246,8 @@ export default function DmPage({ conversationId }: DmPageProps) {
             },
         );
         if (!res.ok) throw new Error("Failed to delete DM message");
+        const data = await res.json();
+        return { updatedRoot: data?.updatedRoot ?? null };
     };
 
     // ── helpers ───────────────────────────────────────────────────────────────
