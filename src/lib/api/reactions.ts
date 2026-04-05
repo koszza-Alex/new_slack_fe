@@ -3,7 +3,7 @@ export interface ReactionView {
   count: number;
   reactedUserIds: string[];
   /** Minimal user info for tooltip display — populated by the backend */
-  reactedUsers?: { id: string; dispname: string | null }[];
+  reactedUsers?: { id: string; dispname: string | null; email: string | null }[];
 }
 
 export interface ToggleReactionResponse {

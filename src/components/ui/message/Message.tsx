@@ -494,7 +494,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                 {reactions.map((r) => {
                   const userReacted = !!currentUserId && r.reactedUserIds.includes(currentUserId);
 
-                  // Build tooltip: "You", "Alice", "You, Bob", etc.
+                  // Build tooltip: "You", "alice@example.com", "You, bob@example.com", etc.
                   const tooltipLabel = (() => {
                     const users = r.reactedUsers ?? [];
                     if (users.length === 0) {
@@ -502,7 +502,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                       return userReacted ? "You" : `${r.count} ${r.count === 1 ? "person" : "people"}`;
                     }
                     return users
-                      .map((u) => u.id === currentUserId ? "You" : (u.dispname ?? "Unknown"))
+                      .map((u) => u.id === currentUserId ? "You" : (u.email ?? u.dispname ?? "Unknown"))
                       .join(", ");
                   })();
 
