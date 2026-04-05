@@ -89,6 +89,8 @@ export default function ChannelListComponent() {
               type={c.channelType}
               id={c.id}
               name={c.name}
+              creatorId={c.creatorId ?? null}
+              currentUserId={userId ?? null}
             />
           ))
         ) : (

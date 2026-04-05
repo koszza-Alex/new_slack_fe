@@ -9,6 +9,7 @@ export default function EditChannelModal({
   onClose,
   channel,
   workspaceId,
+  userId,
 }: any) {
   const { socket } = useSocket();
 
@@ -32,6 +33,7 @@ export default function EditChannelModal({
       name,
       type,
       workspaceId,
+      userId,
     });
 
     onClose();
