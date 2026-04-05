@@ -26,7 +26,7 @@ import EmojiPicker from "../emoji-picker/EmojiPicker";
 import { useParams } from "next/navigation";
 
 type MessageEditorProps = {
-  userData: { id: string; [key: string]: any } | null;
+  userData: { id: string;[key: string]: any } | null;
   // When set, the editor operates in thread-reply mode
   parentMessageId?: string | null;
   // When set, the editor operates in DM mode — emits send_dm_message instead of send_message
@@ -50,6 +50,10 @@ export default function MessageEditor({
   const channelId = Array.isArray(params.channelId)
     ? params.channelId[0]
     : params.channelId;
+  const workspaceId = Array.isArray(params.workspaceId)
+    ? params.workspaceId[0]
+    : params.workspaceId;
+  const token = localStorage.getItem("token");
 
   const handleSend = async () => {
     if (!editor || isEmpty || !socket || !userData?.id) return;
@@ -82,11 +86,17 @@ export default function MessageEditor({
     if (selectedFiles.length > 0) {
       const formData = new FormData();
       selectedFiles.forEach((entry) => formData.append("files", entry.file));
+      formData.append("workspaceId", workspaceId ?? "");
+      formData.append('channelId', channelId ?? '');
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/files`,
-          { method: "POST", body: formData },
-        );
+          `${process.env.NEXT_PUBLIC_SOCKET_URL}/api/files`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          method: "POST", 
+          body: formData,
+        })
         if (res.ok) {
           const data = await res.json();
           // backend returns array of file objects or ids
