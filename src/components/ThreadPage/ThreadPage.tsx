@@ -47,6 +47,7 @@ export const Thread: React.FC<ThreadProps> = ({
     updateThreadMessageReactions,
     updateThreadMessageContent,
     removeThreadMessage,
+    updateRootMessage,
   } = useThreadStore();
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -135,15 +136,19 @@ export const Thread: React.FC<ThreadProps> = ({
     }
   };
 
-  const handleThreadMessageDelete = (messageId: string) => {
+  const handleThreadMessageDelete = (messageId: string, updatedRoot?: any) => {
     removeThreadMessage(messageId);
-    // Broadcast to other subscribers
+    // Broadcast to other subscribers, including updatedRoot so they refresh replyCount
     if (socket) {
       if (dmConversationId) {
-        socket.emit('dm_message_delete', { conversationId: dmConversationId, messageId });
+        socket.emit('dm_message_delete', { conversationId: dmConversationId, messageId, updatedRoot });
       } else if (channelId) {
-        socket.emit('message_delete', { channelId, messageId });
+        socket.emit('message_delete', { channelId, messageId, updatedRoot });
       }
+    }
+    // Update the root message replyCount locally if this was a reply
+    if (updatedRoot) {
+      updateRootMessage(updatedRoot);
     }
   };
 

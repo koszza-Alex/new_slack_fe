@@ -52,7 +52,7 @@ interface SlackMessageProps {
   /** Called after a successful edit so the parent can update its list */
   onMessageUpdate?: (messageId: string, newContent: string, updatedAt: string) => void;
   /** Called after a successful delete so the parent can remove it from its list */
-  onMessageDelete?: (messageId: string) => void;
+  onMessageDelete?: (messageId: string, updatedRoot?: any) => void;
   /**
    * When provided, replaces the internal channel PATCH fetch for edit.
    * Used in DM context where the endpoint is different.
@@ -62,8 +62,9 @@ interface SlackMessageProps {
   /**
    * When provided, replaces the internal channel DELETE fetch.
    * Used in DM context where the endpoint is different.
+   * May return an updatedRoot object if the deleted message was a thread reply.
    */
-  onDeleteConfirm?: (messageId: string) => Promise<void>;
+  onDeleteConfirm?: (messageId: string) => Promise<any>;
   /** Hide the thread/reply button — used in DM mode where threads don't apply */
   hideThreadButton?: boolean;
   /**
@@ -237,8 +238,10 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
     if (!messageId) return;
     setShowActionMenu(false);
     try {
+      let updatedRoot: any = undefined;
       if (onDeleteConfirm) {
-        await onDeleteConfirm(messageId);
+        const result = await onDeleteConfirm(messageId);
+        updatedRoot = result?.updatedRoot ?? undefined;
       } else {
         const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const res = await fetch(
@@ -250,8 +253,10 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
           },
         );
         if (!res.ok) throw new Error("Failed to delete message");
+        const data = await res.json();
+        updatedRoot = data?.updatedRoot ?? undefined;
       }
-      onMessageDelete?.(messageId);
+      onMessageDelete?.(messageId, updatedRoot);
     } catch (err) {
       console.error("Delete failed:", err);
     }

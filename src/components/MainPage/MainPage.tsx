@@ -289,11 +289,20 @@ export const MainPage = (props: { userData: any }) => {
         }
     };
 
-    const handleMessageDelete = (messageId: string) => {
-        setMessages(msg.filter((m) => m.id !== messageId));
+    const handleMessageDelete = (messageId: string, updatedRoot?: any) => {
+        // Filter out the deleted message and optionally update the root's replyCount in one pass
+        setMessages(msg.filter((m) => m.id !== messageId).map((m) =>
+            updatedRoot && m.id === updatedRoot.id
+                ? { ...m, replyCount: updatedRoot.replyCount, lastReplyAt: updatedRoot.lastReplyAt }
+                : m
+        ));
         // Broadcast deletion to other subscribers in this channel
         if (socket && channelId) {
-            socket.emit('message_delete', { channelId, messageId });
+            socket.emit('message_delete', { channelId, messageId, updatedRoot });
+        }
+        // Update the thread store's root message replyCount for the deleting client
+        if (updatedRoot) {
+            updateRootMessage(updatedRoot);
         }
     };
 
