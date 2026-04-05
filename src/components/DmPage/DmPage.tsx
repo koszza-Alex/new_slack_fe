@@ -51,6 +51,8 @@ export default function DmPage({ conversationId }: DmPageProps) {
         setThreadMessages,
         updateRootMessage,
         updateThreadMessageReactions,
+        updateThreadMessageContent,
+        removeThreadMessage,
     } = useThreadStore();
 
     // Close thread when the active DM conversation changes
@@ -135,10 +137,30 @@ export default function DmPage({ conversationId }: DmPageProps) {
             updateThreadMessageReactions(payload.messageId, payload.reactions);
         });
 
+        // Real-time edit from another client in this DM conversation
+        socket.on("dmMessageEdited", (payload: { messageId: string; content: string; updatedAt: string }) => {
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m.id === payload.messageId
+                        ? { ...m, content: payload.content, updatedAt: payload.updatedAt }
+                        : m,
+                ),
+            );
+            updateThreadMessageContent(payload.messageId, payload.content, payload.updatedAt);
+        });
+
+        // Real-time deletion from another client in this DM conversation
+        socket.on("dmMessageDeleted", (payload: { messageId: string }) => {
+            setMessages((prev) => prev.filter((m) => m.id !== payload.messageId));
+            removeThreadMessage(payload.messageId);
+        });
+
         return () => {
             socket.off("new_dm_message");
             socket.off("dm_thread_updated");
             socket.off("dm_reaction_updated");
+            socket.off("dmMessageEdited");
+            socket.off("dmMessageDeleted");
         };
     }, [socket, conversationId, updateRootMessage, updateThreadMessageReactions]);
 
@@ -177,10 +199,14 @@ export default function DmPage({ conversationId }: DmPageProps) {
 
     const handleDmMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
         setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: newContent, updatedAt: newUpdatedAt } : m)));
+        // Broadcast edit to other subscribers in this DM conversation
+        socket?.emit('dm_message_edit', { conversationId, messageId, content: newContent, updatedAt: newUpdatedAt });
     };
 
     const handleDmMessageDelete = (messageId: string) => {
         setMessages((prev) => prev.filter((m) => m.id !== messageId));
+        // Broadcast deletion to other subscribers in this DM conversation
+        socket?.emit('dm_message_delete', { conversationId, messageId });
     };
 
     /** DM-specific edit fetch — returns updatedAt on success */
