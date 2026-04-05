@@ -334,7 +334,7 @@ export default function DmPage({ conversationId }: DmPageProps) {
                                         channelId=""
                                         currentUserId={user?.id ?? null}
                                         senderId={item.senderId}
-                                        files={[]}
+                                        files={item.files ?? []}
                                         reactions={item.reactions ?? []}
                                         replies={item.replyCount ?? 0}
                                         lastReply={formatLastReply(item.lastReplyAt)}

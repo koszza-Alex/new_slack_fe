@@ -348,7 +348,7 @@ export const MainPage = (props: { userData: any }) => {
                                                 props.userData?.id ?? null
                                             }
                                             senderId={item.sender?.id}
-                                            files={item.file ?? []}
+                                            files={item.files ?? []}
                                             reactions={item.reactions ?? []}
                                             replies={item.replyCount ?? 0}
                                             lastReply={formatLastReply(
