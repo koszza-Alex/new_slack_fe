@@ -493,22 +493,42 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
               <div className="flex gap-1.5 mt-2 flex-wrap items-center">
                 {reactions.map((r) => {
                   const userReacted = !!currentUserId && r.reactedUserIds.includes(currentUserId);
+
+                  // Build tooltip: "You", "Alice", "You, Bob", etc.
+                  const tooltipLabel = (() => {
+                    const users = r.reactedUsers ?? [];
+                    if (users.length === 0) {
+                      // Fallback when reactedUsers isn't populated yet
+                      return userReacted ? "You" : `${r.count} ${r.count === 1 ? "person" : "people"}`;
+                    }
+                    return users
+                      .map((u) => u.id === currentUserId ? "You" : (u.dispname ?? "Unknown"))
+                      .join(", ");
+                  })();
+
                   return (
-                    <button
-                      key={r.emoji}
-                      onClick={() => handleEmojiSelect(r.emoji)}
-                      disabled={isPending}
-                      className={`flex items-center gap-1 px-2 py-[3px] rounded-full text-xs border ${
-                        userReacted ? "bg-blue-100 border-blue-500 text-blue-700" : "bg-blue-50 border-blue-300 text-gray-600"
-                      }`}
-                    >
-                      {IMAGE_EMOTICONS[r.emoji] ? (
-                        <img src={IMAGE_EMOTICONS[r.emoji]} alt={r.emoji} className="w-4 h-4 object-contain" />
-                      ) : (
-                        <span>{r.emoji}</span>
-                      )}
-                      <span className="font-bold">{r.count}</span>
-                    </button>
+                    <div key={r.emoji} className="relative group">
+                      <button
+                        onClick={() => handleEmojiSelect(r.emoji)}
+                        disabled={isPending}
+                        className={`flex items-center gap-1 px-2 py-[3px] rounded-full text-xs border ${
+                          userReacted ? "bg-blue-100 border-blue-500 text-blue-700" : "bg-blue-50 border-blue-300 text-gray-600"
+                        }`}
+                      >
+                        {IMAGE_EMOTICONS[r.emoji] ? (
+                          <img src={IMAGE_EMOTICONS[r.emoji]} alt={r.emoji} className="w-4 h-4 object-contain" />
+                        ) : (
+                          <span>{r.emoji}</span>
+                        )}
+                        <span className="font-bold">{r.count}</span>
+                      </button>
+                      {/* Tooltip — shown on hover via CSS */}
+                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex">
+                        <span className="bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap shadow-lg">
+                          {tooltipLabel}
+                        </span>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
