@@ -155,12 +155,45 @@ export default function DmPage({ conversationId }: DmPageProps) {
             removeThreadMessage(payload.messageId);
         });
 
+        // Profile update — refresh sender name/avatar on any message in this conversation
+        socket.on("updated_profile", (data: { userId?: string; id?: string; dispname?: string; avatar?: string }) => {
+            const updatedUserId = data?.userId ?? data?.id;
+            if (!updatedUserId) return;
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m.senderId === updatedUserId
+                        ? {
+                              ...m,
+                              sender: {
+                                  ...m.sender,
+                                  dispname: data.dispname ?? m.sender?.dispname ?? null,
+                                  avatar: data.avatar ?? m.sender?.avatar ?? "/uploads/avatar.png",
+                              },
+                          }
+                        : m,
+                ),
+            );
+            // Also update the conversation header if the other user changed their profile
+            setConversation((prev) => {
+                if (!prev || prev.otherUser?.id !== updatedUserId) return prev;
+                return {
+                    ...prev,
+                    otherUser: {
+                        ...prev.otherUser,
+                        dispname: data.dispname ?? prev.otherUser.dispname,
+                        avatar: data.avatar ?? prev.otherUser.avatar,
+                    },
+                };
+            });
+        });
+
         return () => {
             socket.off("new_dm_message");
             socket.off("dm_thread_updated");
             socket.off("dm_reaction_updated");
             socket.off("dmMessageEdited");
             socket.off("dmMessageDeleted");
+            socket.off("updated_profile");
         };
     }, [socket, conversationId, updateRootMessage, updateThreadMessageReactions]);
 

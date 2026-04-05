@@ -7,6 +7,7 @@ import PauseNotificationsMenu from "@/components/WorkSpace/PauseNotificationsMen
 import { useRouter } from "next/navigation";
 import { useSocket } from "@/providers/SocketProvider";
 import { usePresenceStore, presenceColor } from "@/store/presence-store";
+import { useThreadStore } from "@/store/thread-store";
 
 export default function WorkspaceMenu(props: { userData: any }) {
     const [open, setOpen] = useState(false);
@@ -19,6 +20,7 @@ export default function WorkspaceMenu(props: { userData: any }) {
     const { isOnline } = usePresenceStore();
     const currentUserId: string | undefined = props.userData?.id;
     const joined = currentUserId ? isOnline(currentUserId) : false;
+    const { closeThread } = useThreadStore();
 
     useEffect(() => {
         const handleClick = (e: MouseEvent) => {
@@ -45,11 +47,11 @@ export default function WorkspaceMenu(props: { userData: any }) {
         <div ref={ref} className="relative flex justify-center">
             <UserTooltip name={props.userData?.dispname || "User"}>
                 <div
-                    onClick={() => setOpen((v) => !v)}
+                    onClick={() => { setOpen((v) => !v); closeThread(); }}
                     className="relative w-9.5 h-9.5 rounded-xl bottom-[4.5px]"
                 >
                     <img
-                        src={`${process.env.NEXT_PUBLIC_SOCKET_URL}${props.userData?.avatar} `}
+                        src={`${process.env.NEXT_PUBLIC_SOCKET_URL}${props.userData?.avatar}`}
                         className="w-full h-full object-cover rounded-[10px] cursor-pointer"
                     />
                     {/* Status dot — green when joined, #3F0E40 when unjoined */}

@@ -44,8 +44,10 @@ export const WorkSpace = (props: { userData: any }) => {
         if (!socket) return;
 
         socket.on("updated_profile", (data: any) => {
-            // Only update this user's state if the event is for the current user
-            if (data?.userId && props.userData?.id && data.userId === props.userData.id) {
+            // Accept both "id" and "userId" — ProfileSidebar emits with "id",
+            // other paths may use "userId"
+            const updatedId = data?.userId ?? data?.id;
+            if (updatedId && props.userData?.id && updatedId === props.userData.id) {
                 setUserState((prev: any) => prev ? { ...prev, dispname: data.dispname, avatar: data.avatar } : prev);
             }
         });
