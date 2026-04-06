@@ -16,7 +16,8 @@ import {
   Strikethrough,
   Video,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BsSlashSquare } from "react-icons/bs";
 import { IoMdSend } from "react-icons/io";
 import { IoCodeSlash } from "react-icons/io5";
@@ -27,13 +28,9 @@ import { useParams } from "next/navigation";
 
 type MessageEditorProps = {
   userData: { id: string; [key: string]: any } | null;
-  // When set, the editor operates in thread-reply mode
   parentMessageId?: string | null;
-  // When set, the editor operates in DM mode — emits send_dm_message instead of send_message
   dmConversationId?: string | null;
-  // Override the placeholder text (e.g. "Reply in thread…")
   placeholder?: string;
-  // Called after a message is successfully emitted, with the raw payload
   onMessageSent?: (payload: Record<string, unknown>) => void;
 };
 
@@ -54,16 +51,57 @@ export default function MessageEditor({
     ? params.workspaceId[0]
     : params.workspaceId;
 
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [isEmpty, setIsEmpty] = useState(true);
+  const [showFormat, setShowFormat] = useState(true);
+  const [selectedFiles, setSelectedFiles] = useState<{ file: File; preview: string | null }[]>([]);
+
+  // Emoji picker portal positioning
+  const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!showEmoji) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiBtnRef.current?.contains(e.target as Node)) return;
+      setShowEmoji(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showEmoji]);
+
+  const handleEmojiButtonClick = () => {
+    if (!emojiBtnRef.current) return;
+    const rect = emojiBtnRef.current.getBoundingClientRect();
+    const pickerH = 400;
+    const pickerW = 320;
+    const gap = 8;
+
+    // Prefer opening upward (above the toolbar)
+    const top =
+      rect.top - pickerH - gap >= 0
+        ? rect.top - pickerH - gap
+        : rect.bottom + gap;
+
+    let left = rect.left;
+    if (left + pickerW > window.innerWidth) {
+      left = window.innerWidth - pickerW - gap;
+    }
+    if (left < gap) left = gap;
+
+    setPickerStyle({ position: "fixed", top, left, zIndex: 9999 });
+    setShowEmoji((v) => !v);
+  };
+
   const handleSend = async () => {
     if (!editor || !socket || !userData?.id) return;
-    // Allow send if there's text OR files attached
     if (isEmpty && selectedFiles.length === 0) return;
 
-    // DM mode — requires dmConversationId, no channelId needed
     if (dmConversationId) {
       const content = editor.getHTML();
-
-      // Upload any selected files first
       let fileIds: string[] = [];
       if (selectedFiles.length > 0) {
         const formData = new FormData();
@@ -85,29 +123,21 @@ export default function MessageEditor({
         selectedFiles.forEach((e) => { if (e.preview) URL.revokeObjectURL(e.preview); });
         setSelectedFiles([]);
       }
-
       const payload: Record<string, unknown> = {
         conversationId: dmConversationId,
         senderId: userData.id,
         content,
         fileIds,
       };
-      // Include parentId if this is a DM thread reply
-      if (parentMessageId?.trim()) {
-        payload.parentId = parentMessageId;
-      }
+      if (parentMessageId?.trim()) payload.parentId = parentMessageId;
       socket.emit("send_dm_message", payload);
       onMessageSent?.(payload);
       editor.commands.clearContent();
       return;
     }
 
-    // Channel / thread mode — requires channelId
     if (!channelId) return;
-
     const content = editor.getHTML();
-
-    // Upload any selected files first, collect returned file IDs
     let fileIds: string[] = [];
     if (selectedFiles.length > 0) {
       const formData = new FormData();
@@ -119,7 +149,6 @@ export default function MessageEditor({
         );
         if (res.ok) {
           const data = await res.json();
-          // backend returns array of file objects or ids
           fileIds = (Array.isArray(data) ? data : data.files ?? []).map(
             (f: any) => f.id ?? f,
           );
@@ -127,70 +156,39 @@ export default function MessageEditor({
       } catch (err) {
         console.error("File upload failed:", err);
       }
-      // clear previews
       selectedFiles.forEach((e) => { if (e.preview) URL.revokeObjectURL(e.preview); });
       setSelectedFiles([]);
     }
 
     if (parentMessageId) {
       if (!parentMessageId.trim()) return;
-      const payload = {
-        channelId,
-        senderId: userData.id,
-        content,
-        parentId: parentMessageId,
-        fileIds,
-        workspaceId,
-        createdAt: new Date(),
-      };
+      const payload = { channelId, senderId: userData.id, content, parentId: parentMessageId, fileIds, workspaceId, createdAt: new Date() };
       socket.emit("send_message", payload);
       onMessageSent?.(payload);
     } else {
-      const payload = {
-        channelId,
-        senderId: userData.id,
-        content,
-        fileIds,
-        workspaceId,
-        createdAt: new Date(),
-      };
+      const payload = { channelId, senderId: userData.id, content, fileIds, workspaceId, createdAt: new Date() };
       socket.emit("send_message", payload);
       onMessageSent?.(payload);
     }
-
     editor.commands.clearContent();
   };
-
-  const [showEmoji, setShowEmoji] = useState(false);
-  const [isEmpty, setIsEmpty] = useState(true);
-  const [showFormat, setShowFormat] = useState(true);
-  const [selectedFiles, setSelectedFiles] = useState<{ file: File; preview: string | null }[]>([]);
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Placeholder.configure({
-        placeholder: placeholder ?? "Message #new-channel",
-      }),
-      Mention.configure({
-        HTMLAttributes: {
-          class: "text-blue-500 font-medium",
-        },
-      }),
+      Placeholder.configure({ placeholder: placeholder ?? "Message #new-channel" }),
+      Mention.configure({ HTMLAttributes: { class: "text-blue-500 font-medium" } }),
     ],
     content: "",
     immediatelyRender: false,
     onUpdate: ({ editor }) => {
-      const text = editor.getText().trim();
-      setIsEmpty(text.length === 0);
+      setIsEmpty(editor.getText().trim().length === 0);
     },
     editorProps: {
-      handleKeyDown: (view, event) => {
+      handleKeyDown: (_view, event) => {
         if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault(); // 🚫 stop newline
-          handleSend();           // ✅ send message
+          event.preventDefault();
+          handleSend();
           return true;
         }
         return false;
@@ -198,21 +196,18 @@ export default function MessageEditor({
     },
   });
 
-  const handleFileClick = () => {
-    fileInputRef.current?.click();
-  };
+  const handleFileClick = () => fileInputRef.current?.click();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
-
-    const entries = files.map((file) => ({
-      file,
-      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
-    }));
-
-    setSelectedFiles((prev) => [...prev, ...entries]);
-    // reset input so the same file can be re-selected
+    setSelectedFiles((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        file,
+        preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+      })),
+    ]);
     e.target.value = "";
   };
 
@@ -228,65 +223,27 @@ export default function MessageEditor({
 
   return (
     <div className="border border-[#e0dada] w-full rounded-[10px] bg-white text-gray-700">
-      {/* Toolbar */}
-
-      {showFormat ? (
-        <div className={`flex px-2.5 py-1.5 rounded-t-[10px] items-center gap-3 bg-[#f8f8f8] mb-1  
-           ${isEmpty ? "text-gray-400" : "text-gray-800"} `}>
-          <button onClick={() => editor.chain().focus().toggleBold().run()}>
-            <Bold size={18} />
-          </button>
-          <button onClick={() => editor.chain().focus().toggleItalic().run()}>
-            <Italic size={18} />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-          >
-            <u>U</u>
-          </button>
-          <button onClick={() => editor.chain().focus().toggleStrike().run()}>
-            <Strikethrough size={18} />
-          </button>
-
+      {/* Formatting toolbar */}
+      {showFormat && (
+        <div className={`flex px-2.5 py-1.5 rounded-t-[10px] items-center gap-3 bg-[#f8f8f8] mb-1 ${isEmpty ? "text-gray-400" : "text-gray-800"}`}>
+          <button onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={18} /></button>
+          <button onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={18} /></button>
+          <button onClick={() => editor.chain().focus().toggleUnderline().run()}><u>U</u></button>
+          <button onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={18} /></button>
           <div className="w-px h-4 bg-gray-400 mx-1" />
-
           <button><Link size={18} /></button>
-
-          <button
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          >
-            <ListOrdered size={18} />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-          >
-            <List size={18} />
-          </button>
+          <button onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered size={18} /></button>
+          <button onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={18} /></button>
           <div className="w-px h-4 bg-gray-400 mx-1" />
-          <button >
-            <VscListSelection size={18} />
-          </button>
-          <button onClick={() => editor.chain().focus().toggleCode().run()}>
-            <IoCodeSlash size={18} />
-          </button>
+          <button><VscListSelection size={18} /></button>
+          <button onClick={() => editor.chain().focus().toggleCode().run()}><IoCodeSlash size={18} /></button>
         </div>
-      ) : (
-        ""
       )}
 
-      {/* Editor */}
+      {/* Tiptap editor area */}
       <EditorContent
         editor={editor}
-        className="
-          min-h-[35px]
-          max-h-[350px]
-          overflow-y-auto
-          px-2.5 py-1
-          text-sm
-          outline-none
-          focus:outline-none
-          [&_.ProseMirror]:outline-none
-          [&_.ProseMirror]:border-none"
+        className="min-h-[35px] max-h-[350px] overflow-y-auto px-2.5 py-1 text-sm outline-none focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:border-none"
       />
 
       {/* File preview strip */}
@@ -297,91 +254,73 @@ export default function MessageEditor({
               {entry.preview ? (
                 <img src={entry.preview} className="w-full h-full object-cover" />
               ) : (
-                <div className="text-[10px] text-center text-gray-500 px-1 break-all leading-tight">
-                  {entry.file.name}
-                </div>
+                <div className="text-[10px] text-center text-gray-500 px-1 break-all leading-tight">{entry.file.name}</div>
               )}
               <button
                 onClick={() => removeFile(i)}
                 className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-              >
-                ✕
-              </button>
+              >✕</button>
             </div>
           ))}
         </div>
       )}
 
-      {/* Bottom bar */}
-      <div className="flex justify-between items-center p-2 text-gray-500 relative">
-        <div className="flex gap-3">
-          {/* Add file */}
-          <button
-            onClick={handleFileClick}
-            className="cursor-pointer text-4xl hover:rotate-360 transition"
-          >
+      {/* Bottom toolbar */}
+      <div className="flex justify-between items-center p-2 text-gray-500">
+        <div className="flex gap-3 items-center">
+          <button onClick={handleFileClick} className="cursor-pointer hover:text-gray-700 transition">
             <Plus size={18} />
           </button>
-          {/* Hidden input */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            multiple
-            onChange={handleFileChange}
-          />
+          <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleFileChange} />
 
-          {/* Toggle formating */}
-          <button
-            onClick={() => setShowFormat((prev) => !prev)}
-            className="cursor-pointer"
-          >
-            <u >Aa</u>
+          <button onClick={() => setShowFormat((v) => !v)} className="cursor-pointer">
+            <u>Aa</u>
           </button>
 
-          {/* Emotion */}
+          {/* Emoji button — picker rendered in a portal so it never affects layout */}
           <button
-            onClick={() => setShowEmoji((prev) => !prev)}
-            className=" cursor-pointer"
+            ref={emojiBtnRef}
+            onClick={handleEmojiButtonClick}
+            className="cursor-pointer hover:text-gray-700 transition"
+            aria-label="Insert emoji"
           >
             <SlEmotsmile size={18} />
           </button>
-          {showEmoji && (
+
+          <button className="cursor-pointer">@</button>
+          <span>|</span>
+          <button className="cursor-pointer"><Video size={18} /></button>
+          <button className="cursor-pointer"><Mic size={18} /></button>
+          <span>|</span>
+          <button className="cursor-pointer"><BsSlashSquare size={18} /></button>
+        </div>
+
+        <button
+          className={`flex items-center gap-1 px-2 rounded-md text-sm h-7 transition ${
+            isEmpty && selectedFiles.length === 0
+              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+              : "bg-green-800 text-white hover:bg-green-700"
+          }`}
+          onClick={handleSend}
+        >
+          <IoMdSend size={18} /> | <span className="text-xs">▾</span>
+        </button>
+      </div>
+
+      {/* Emoji picker — rendered in a portal so it floats outside the editor's layout flow */}
+      {showEmoji && typeof document !== "undefined" &&
+        createPortal(
+          <div style={pickerStyle}>
             <EmojiPicker
               onSelect={(emoji) => {
                 editor.chain().focus().insertContent(emoji).run();
                 setShowEmoji(false);
               }}
             />
-          )}
-
-          {/* Choose members */}
-          <button className=" cursor-pointer">@</button>|
-          <button className=" cursor-pointer" >
-            <Video size={18} />
-          </button>
-          <button className=" cursor-pointer" >
-            <Mic size={18} />
-          </button>|
-          <button className=" cursor-pointer" >
-            <BsSlashSquare size={18} />
-          </button>
-        </div>
-
-        {/* Message send ✈*/}
-        <button
-          className={`
-                     flex items-center gap-1 px-2 rounded-md text-sm h-7 transition
-                      ${isEmpty && selectedFiles.length === 0
-              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-              : "bg-green-800 text-white hover:bg-green-700"
-            }
-                    `}
-        >
-          <IoMdSend size={18} onClick={() => handleSend()} /> | <span className="text-xs">▾</span>
-        </button>
-
-      </div>
+          </div>,
+          document.body,
+        )
+      }
     </div>
   );
 }
