@@ -1,6 +1,5 @@
 import Image from "next/image";
 import { HuddleCustomButton } from "./HuddleCustomButton";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 export function ChannelRow({ name, height, width, avatarUrl, user, time }: Props) {
   return (

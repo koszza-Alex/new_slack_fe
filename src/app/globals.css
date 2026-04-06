@@ -87,3 +87,136 @@ body {
     transform: scale(1);
   }
 }
+
+.ripple {
+  position: absolute;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(0);
+  animation: ripple-effect 1s ease-out;
+  pointer-events: none;
+}
+
+@keyframes ripple-effect {
+  to {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.button-press {
+  transition: transform 0.15s ease;
+}
+
+.button-press:active {
+  transform: scale(0.96);
+}
+.active-tab {
+  border-bottom: 2px solid #53006e;
+}
+
+/* Slack-like scrollbar */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background: #A1A1AA;
+  /* soft gray like Slack */
+}
+
+/* Firefox */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.sidebar-scroll:hover {
+  scrollbar-color: #A1A1AA transparent;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+.overflow-x-hidden {
+overflow-x: hidden;
+}
+.ff {
+font-family: "Salesforce-Sans", system-ui, -apple-system, blinkmacsystemfont, "Segoe UI", roboto, "Helvetica Neue", arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+.fw-6 {
+font-weight: 600;
+}
+
+.workspace-bt1{
+border: none;
+transition: box-shadow 0.3s ease;
+transition: 0.3s;
+}
+.workspace-bt1:hover {
+box-shadow: inset 0 0 0 2px rgb(66, 64, 64);
+}
+.workspace-bt2{
+border: 1px solid white;
+transition: box-shadow 0.3s ease;
+transition: 0.3s;
+}
+
+.workspace-bt2:hover {
+box-shadow: inset 0 0 0 2px rgb(255, 255, 255);
+}
+.workspacelist-bt{
+border-bottom: 2px solid #53006E;
+}
+
+.lt-6 {
+letter-spacing: 1px;
+}
+
+.bt-rd-2 {
+border-radius: 8px;
+}
+
+.absolute {
+position: absolute;
+}
+
+.absolute-y-center {
+top: 50%;
+
+transform: translate(0, -50%);
+}
+
+.absolute-center {
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+}
+
+* {
+box-sizing: border-box;
+}
+
+.relative {
+position: relative;
+}
+
+.font {
+font-weight: bold;
+}

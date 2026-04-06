@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import CustomButton from "../component/channel_button";
-import FileSearch from "../../files/file_search";
+import FileSearch from "../component/file_search";
 import Card from "./directories_card";
 import DirectoriesDropdownBtn from "./DirectoriesDropdownBtn";
 import { People } from "./domi";

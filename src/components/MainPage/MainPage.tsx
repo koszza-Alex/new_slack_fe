@@ -17,6 +17,9 @@ import MessageEditor from "../ui/messageEditor/MessageEditor";
 import { useThreadResize } from "@/hooks/useThreadResize";
 import { getAvatarUrl, getDisplayName, formatLastReply, groupMessagesByDate, sortByDate } from "@/lib/messageUtils";
 import type { User } from "@/context/Authcontext";
+import Directories from "../workspaceHeaderPage/directories/directories";
+import { DraftsPage } from "../workspaceHeaderPage/Drapts&send/DraptsPage";
+import HuddlePage from "../workspaceHeaderPage/huddle/HuddlePage";
 
 export const MainPage = (props: { userData: User | null }) => {
     const { socket } = useSocket();
@@ -191,7 +194,10 @@ export const MainPage = (props: { userData: User | null }) => {
     return (
         <div className="flex h-full overflow-hidden">
             <div className="flex-1 min-w-0 h-full bg-white">
-                {flag === "Threads" ? <div></div> :
+                {flag === "Directories" && <Directories />}
+                {flag === "Drafts % Sent" && <DraftsPage />}
+                {flag === "Huddles" && <HuddlePage />}
+                {flag === "" &&
                     <div>
                         <MainTopBar />
                         <MainBar />

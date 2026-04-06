@@ -1,4 +1,4 @@
-import { HuddleCustomButton } from "../workspaceHeaderPage/huddle/HuddleCustomButton";
+import { HuddleCustomButton } from "../huddle/HuddleCustomButton";
 
 export function Drapt1Page() {
   return (

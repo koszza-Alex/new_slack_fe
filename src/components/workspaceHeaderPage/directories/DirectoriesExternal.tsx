@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import CustomButton from "../component/channel_button";
-import FileSearch from "../../files/file_search";
+import FileSearch from "../component/file_search";
 import DirectoriesDropdownBtn from "./DirectoriesDropdownBtn";
 import { Channel } from "./domi";
 import ExternalChannelsSteps from "./ExternalChannelsStep";
