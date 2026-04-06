@@ -31,7 +31,9 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
 
         const data = await res.json();
 
-        if (res.status === 401 || res.status === 500) {
+        if (res.status === 401 || res.status === 403 || res.status === 500) {
+          localStorage.removeItem("token");
+          localStorage.removeItem("userId");
           router.push("/auth/sign_in");
           return;
         }
