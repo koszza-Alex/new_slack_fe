@@ -50,6 +50,9 @@ export default function MessageEditor({
   const channelId = Array.isArray(params.channelId)
     ? params.channelId[0]
     : params.channelId;
+  const workspaceId = Array.isArray(params.workspaceId)
+    ? params.workspaceId[0]
+    : params.workspaceId;
 
   const handleSend = async () => {
     if (!editor || !socket || !userData?.id) return;
@@ -137,6 +140,7 @@ export default function MessageEditor({
         content,
         parentId: parentMessageId,
         fileIds,
+        workspaceId,
         createdAt: new Date(),
       };
       socket.emit("send_message", payload);
@@ -147,6 +151,7 @@ export default function MessageEditor({
         senderId: userData.id,
         content,
         fileIds,
+        workspaceId,
         createdAt: new Date(),
       };
       socket.emit("send_message", payload);

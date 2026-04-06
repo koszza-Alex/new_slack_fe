@@ -34,12 +34,22 @@ export default function WorkspaceMenu(props: { userData: any }) {
 
     const signOut = () => {
         const userId = typeof window !== "undefined" ? localStorage.getItem("userId") : null;
-        // Notify all other clients immediately before the socket disconnects
+
+        // 1. Immediately broadcast offline to all other clients
         if (socket && userId) {
             socket.emit("user_signed_out", userId);
         }
+
+        // 2. Clear local auth state
         localStorage.removeItem("token");
         localStorage.removeItem("userId");
+
+        // 3. Disconnect the socket so handleDisconnect fires on the backend
+        //    (cleans up any remaining socket→user mappings)
+        if (socket) {
+            socket.disconnect();
+        }
+
         router.push("/auth/sign_in");
     };
 

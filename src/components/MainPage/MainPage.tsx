@@ -30,6 +30,9 @@ export const MainPage = (props: { userData: User | null }) => {
     const channelId = Array.isArray(params.channelId)
         ? params.channelId[0]
         : params.channelId;
+    const workspaceId = Array.isArray(params.workspaceId)
+        ? params.workspaceId[0]
+        : params.workspaceId;
 
     const { threadWidth, onDragStart: onThreadDragStart, THREAD_MIN, THREAD_MAX } = useThreadResize();
 
@@ -137,11 +140,21 @@ export const MainPage = (props: { userData: User | null }) => {
 
     const groupedMessages = groupMessagesByDate(sortByDate(msg));
 
-    const handleReactionUpdate = (messageId: string, reactions: ReactionView[]) => {
+    const handleReactionUpdate = (messageId: string, reactions: ReactionView[], messageOwnerId?: string, emoji?: string) => {
         setMessages(msg.map((m) => (m.id === messageId ? { ...m, reactions } : m)));
         updateThreadMessageReactions(messageId, reactions);
         if (socket && channelId) {
-            socket.emit("toggle_reaction", { channelId, messageId, reactions });
+            socket.emit("toggle_reaction", {
+                channelId,
+                messageId,
+                reactions,
+                workspaceId,
+                senderId: props.userData?.id,
+                messageOwnerId,
+                actorUsername: props.userData?.dispname || props.userData?.email || 'Someone',
+                actorAvatar: props.userData?.avatar ?? '/uploads/avatar.png',
+                emoji,
+            });
         }
     };
 

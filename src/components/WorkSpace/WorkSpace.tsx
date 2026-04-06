@@ -6,14 +6,21 @@ import CreateMenu from "@/components/WorkSpace/CreateMenu";
 import WorkspaceMenu from "@/components/WorkSpace/WorkspaceMenu";
 import { useSocket } from "@/providers/SocketProvider";
 import { useSidebarStore } from "@/store/sidebar-store";
+import { useActivityStore } from "@/store/activity-store";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 export const WorkSpace = (props: { userData: any }) => {
     const { socket } = useSocket();
-    const { next, prev, incrementUnread, clearUnread, active } = useSidebarStore();
+    const { next, prev, incrementUnread, clearUnread, setUnread, active } = useSidebarStore();
+    const { unreadCount: activityUnread } = useActivityStore();
     const [userstate, setUserState] = useState<any>(null);
     const pathname = usePathname();
+
+    // Sync activity unread count into the sidebar badge
+    useEffect(() => {
+        setUnread("activity", activityUnread);
+    }, [activityUnread, setUnread]);
 
     useEffect(() => {
         if (props.userData) setUserState(props.userData);

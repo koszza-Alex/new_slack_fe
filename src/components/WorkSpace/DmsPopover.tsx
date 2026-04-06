@@ -200,7 +200,7 @@ export default function DmsPopover({ children }: { children: React.ReactNode }) 
                                             className="w-9 h-9 rounded-md object-cover"
                                         />
                                         <span
-                                            className={`absolute bottom-[-1px] right-[-1px] w-2.5 h-2.5 rounded-full border-2 border-white ${presenceColor(online)}`}
+                                            className={`absolute bottom-[-1px] right-[-1px] w-2.5 h-2.5 rounded-full border-2 border-white ${presenceColor(online, false)}`}
                                         />
                                     </div>
 

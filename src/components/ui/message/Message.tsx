@@ -50,7 +50,7 @@ interface SlackMessageProps {
   /** The id of the user who sent this message — used to gate the action menu */
   senderId?: string;
   onCommentClick: () => void;
-  onReactionUpdate: (messageId: string, reactions: ReactionView[]) => void;
+  onReactionUpdate: (messageId: string, reactions: ReactionView[], messageOwnerId?: string, emoji?: string) => void;
   /** Called after a successful edit so the parent can update its list */
   onMessageUpdate?: (messageId: string, newContent: string, updatedAt: string) => void;
   /** Called after a successful delete so the parent can remove it from its list */
@@ -167,7 +167,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
     setIsPending(true);
     try {
       const result = await toggleReaction(channelId, messageId, emoji, currentUserId);
-      onReactionUpdate(result.messageId, result.reactions);
+      onReactionUpdate(result.messageId, result.reactions, senderId, emoji);
     } catch (err) {
       console.error("Failed to toggle reaction:", err);
     } finally {
@@ -510,8 +510,7 @@ export const SlackMessage: React.FC<SlackMessageProps> = ({
                     <div key={r.emoji} className="relative group">
                       <button
                         onClick={() => handleEmojiSelect(r.emoji)}
-                        disabled={isPending}
-                        className={`flex items-center gap-1 px-2 py-[3px] rounded-full text-xs border ${
+                        disabled={isPending}                        className={`flex items-center gap-1 px-2 py-[3px] rounded-full text-xs border ${
                           userReacted ? "bg-blue-100 border-blue-500 text-blue-700" : "bg-blue-50 border-blue-300 text-gray-600"
                         }`}
                       >

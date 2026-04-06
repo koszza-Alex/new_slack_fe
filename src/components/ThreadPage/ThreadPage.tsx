@@ -101,10 +101,10 @@ export const Thread: React.FC<ThreadProps> = ({
   const getDisplayName = (sender: any) => sender?.dispname || "Slack_User";
 
   // Channel reaction handler — used when channelId is set
-  const handleChannelReactionUpdate = (messageId: string, reactions: ReactionView[]) => {
+  const handleChannelReactionUpdate = (messageId: string, reactions: ReactionView[], messageOwnerId?: string, emoji?: string) => {
     updateThreadMessageReactions(messageId, reactions);
     if (socket && channelId) {
-      socket.emit("toggle_reaction", { channelId, messageId, reactions });
+      socket.emit("toggle_reaction", { channelId, messageId, reactions, messageOwnerId, emoji });
     }
   };
 
