@@ -79,32 +79,41 @@ export default function DmPage({ conversationId }: DmPageProps) {
 
         socket.emit("join_dm", conversationId);
 
-        socket.on("new_dm_message", (msg: DmMessageItem) => {
-            if (msg.parentId) return;
-            setMessages((prev) => [...prev, msg]);
-        });
+        // ── All handlers are scoped to THIS conversationId ──────────────────
+        // This prevents messages from other DM conversations leaking in when
+        // the user navigates between DMs without a full unmount/remount.
 
-        socket.on("dm_thread_updated", (updatedRoot: DmMessageItem) => {
+        const onNewMessage = (msg: DmMessageItem) => {
+            if (msg.conversationId !== conversationId) return; // wrong conversation — ignore
+            if (msg.parentId) return; // thread reply — not in root list
+            setMessages((prev) => [...prev, msg]);
+        };
+
+        const onThreadUpdated = (updatedRoot: DmMessageItem) => {
+            if (updatedRoot.conversationId !== conversationId) return;
             setMessages((prev) => prev.map((m) => (m.id === updatedRoot.id ? { ...m, ...updatedRoot } : m)));
             updateRootMessage(updatedRoot as any);
-        });
+        };
 
-        socket.on("dm_reaction_updated", (payload: { messageId: string; reactions: ReactionView[] }) => {
+        const onReactionUpdated = (payload: { messageId: string; reactions: ReactionView[]; conversationId?: string }) => {
+            if (payload.conversationId && payload.conversationId !== conversationId) return;
             setMessages((prev) => prev.map((m) => (m.id === payload.messageId ? { ...m, reactions: payload.reactions } : m)));
             updateThreadMessageReactions(payload.messageId, payload.reactions);
-        });
+        };
 
-        socket.on("dmMessageEdited", (payload: { messageId: string; content: string; updatedAt: string }) => {
+        const onMessageEdited = (payload: { messageId: string; content: string; updatedAt: string; conversationId?: string }) => {
+            if (payload.conversationId && payload.conversationId !== conversationId) return;
             setMessages((prev) => prev.map((m) => m.id === payload.messageId ? { ...m, content: payload.content, updatedAt: payload.updatedAt } : m));
             updateThreadMessageContent(payload.messageId, payload.content, payload.updatedAt);
-        });
+        };
 
-        socket.on("dmMessageDeleted", (payload: { messageId: string }) => {
+        const onMessageDeleted = (payload: { messageId: string; conversationId?: string }) => {
+            if (payload.conversationId && payload.conversationId !== conversationId) return;
             setMessages((prev) => prev.filter((m) => m.id !== payload.messageId));
             removeThreadMessage(payload.messageId);
-        });
+        };
 
-        socket.on("updated_profile", (data: { userId?: string; id?: string; dispname?: string; avatar?: string }) => {
+        const onProfileUpdated = (data: { userId?: string; id?: string; dispname?: string; avatar?: string }) => {
             const updatedUserId = data?.userId ?? data?.id;
             if (!updatedUserId) return;
             setMessages((prev) =>
@@ -118,15 +127,23 @@ export default function DmPage({ conversationId }: DmPageProps) {
                 if (!prev || prev.otherUser?.id !== updatedUserId) return prev;
                 return { ...prev, otherUser: { ...prev.otherUser, dispname: data.dispname ?? prev.otherUser.dispname, avatar: data.avatar ?? prev.otherUser.avatar } };
             });
-        });
+        };
+
+        socket.on("new_dm_message", onNewMessage);
+        socket.on("dm_thread_updated", onThreadUpdated);
+        socket.on("dm_reaction_updated", onReactionUpdated);
+        socket.on("dmMessageEdited", onMessageEdited);
+        socket.on("dmMessageDeleted", onMessageDeleted);
+        socket.on("updated_profile", onProfileUpdated);
 
         return () => {
-            socket.off("new_dm_message");
-            socket.off("dm_thread_updated");
-            socket.off("dm_reaction_updated");
-            socket.off("dmMessageEdited");
-            socket.off("dmMessageDeleted");
-            socket.off("updated_profile");
+            // Remove the exact handler references — not all listeners for the event
+            socket.off("new_dm_message", onNewMessage);
+            socket.off("dm_thread_updated", onThreadUpdated);
+            socket.off("dm_reaction_updated", onReactionUpdated);
+            socket.off("dmMessageEdited", onMessageEdited);
+            socket.off("dmMessageDeleted", onMessageDeleted);
+            socket.off("updated_profile", onProfileUpdated);
         };
     }, [socket, conversationId, updateRootMessage, updateThreadMessageReactions]);
 
