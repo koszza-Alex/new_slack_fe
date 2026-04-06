@@ -22,7 +22,7 @@ export const MainPage = (props: { userData: any }) => {
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const searchparams = useSearchParams();
-    const messageId = searchparams.get('messageId')
+    const messageId = searchparams.get("messageId");
     const params = useParams();
     const channelId = Array.isArray(params.channelId)
         ? params.channelId[0]
@@ -46,7 +46,10 @@ export const MainPage = (props: { userData: any }) => {
             if (!threadDragging.current) return;
             // Dragging left edge → moving left increases width
             const delta = threadStartX.current - ev.clientX;
-            const next = Math.min(THREAD_MAX, Math.max(THREAD_MIN, threadStartWidth.current + delta));
+            const next = Math.min(
+                THREAD_MAX,
+                Math.max(THREAD_MIN, threadStartWidth.current + delta),
+            );
             setThreadWidth(next);
         };
         const onUp = () => {
@@ -150,27 +153,36 @@ export const MainPage = (props: { userData: any }) => {
         // Payload: { messageId, content, updatedAt }
         socket.on(
             "messageEdited",
-            (payload: { messageId: string; content: string; updatedAt: string }) => {
+            (payload: {
+                messageId: string;
+                content: string;
+                updatedAt: string;
+            }) => {
                 setMessages(
                     msg.map((m) =>
                         m.id === payload.messageId
-                            ? { ...m, content: payload.content, updatedAt: payload.updatedAt }
+                            ? {
+                                  ...m,
+                                  content: payload.content,
+                                  updatedAt: payload.updatedAt,
+                              }
                             : m,
                     ),
                 );
-                updateThreadMessageContent(payload.messageId, payload.content, payload.updatedAt);
+                updateThreadMessageContent(
+                    payload.messageId,
+                    payload.content,
+                    payload.updatedAt,
+                );
             },
         );
 
         // Real-time message deletion from other clients.
         // Payload: { messageId }
-        socket.on(
-            "messageDeleted",
-            (payload: { messageId: string }) => {
-                setMessages(msg.filter((m) => m.id !== payload.messageId));
-                removeThreadMessage(payload.messageId);
-            },
-        );
+        socket.on("messageDeleted", (payload: { messageId: string }) => {
+            setMessages(msg.filter((m) => m.id !== payload.messageId));
+            removeThreadMessage(payload.messageId);
+        });
 
         return () => {
             socket.off("new_message");
@@ -194,16 +206,16 @@ export const MainPage = (props: { userData: any }) => {
                 return;
             }
 
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.scrollIntoView({ behavior: "smooth", block: "center" });
 
             const highlightClasses = [
-                'bg-blue-100',
-                'border-2',
-                'border-yellow-400',
-                'rounded-lg',
-                'shadow-lg',
-                'transition-all',
-                'duration-300',
+                "bg-blue-100",
+                "border-2",
+                "border-yellow-400",
+                "rounded-lg",
+                "shadow-lg",
+                "transition-all",
+                "duration-300",
             ];
 
             element.classList.remove(...highlightClasses);
@@ -215,14 +227,10 @@ export const MainPage = (props: { userData: any }) => {
             setTimeout(() => {
                 element.classList.remove(...highlightClasses);
             }, 3000);
-
         }, 100);
     };
 
     useEffect(() => {
-        if (messageId) {
-            scrollToMessage(messageId);
-        }
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [msg]);
 
@@ -281,24 +289,51 @@ export const MainPage = (props: { userData: any }) => {
         }
     };
 
-    const handleMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
-        setMessages(msg.map((m) => (m.id === messageId ? { ...m, content: newContent, updatedAt: newUpdatedAt } : m)));
+    const handleMessageUpdate = (
+        messageId: string,
+        newContent: string,
+        newUpdatedAt: string,
+    ) => {
+        setMessages(
+            msg.map((m) =>
+                m.id === messageId
+                    ? { ...m, content: newContent, updatedAt: newUpdatedAt }
+                    : m,
+            ),
+        );
         // Broadcast edit to other subscribers in this channel
         if (socket && channelId) {
-            socket.emit('message_edit', { channelId, messageId, content: newContent, updatedAt: newUpdatedAt });
+            socket.emit("message_edit", {
+                channelId,
+                messageId,
+                content: newContent,
+                updatedAt: newUpdatedAt,
+            });
         }
     };
 
     const handleMessageDelete = (messageId: string, updatedRoot?: any) => {
         // Filter out the deleted message and optionally update the root's replyCount in one pass
-        setMessages(msg.filter((m) => m.id !== messageId).map((m) =>
-            updatedRoot && m.id === updatedRoot.id
-                ? { ...m, replyCount: updatedRoot.replyCount, lastReplyAt: updatedRoot.lastReplyAt }
-                : m
-        ));
+        setMessages(
+            msg
+                .filter((m) => m.id !== messageId)
+                .map((m) =>
+                    updatedRoot && m.id === updatedRoot.id
+                        ? {
+                              ...m,
+                              replyCount: updatedRoot.replyCount,
+                              lastReplyAt: updatedRoot.lastReplyAt,
+                          }
+                        : m,
+                ),
+        );
         // Broadcast deletion to other subscribers in this channel
         if (socket && channelId) {
-            socket.emit('message_delete', { channelId, messageId, updatedRoot });
+            socket.emit("message_delete", {
+                channelId,
+                messageId,
+                updatedRoot,
+            });
         }
         // Update the thread store's root message replyCount for the deleting client
         if (updatedRoot) {
@@ -360,8 +395,12 @@ export const MainPage = (props: { userData: any }) => {
                                             onReactionUpdate={
                                                 handleReactionUpdate
                                             }
-                                            onMessageUpdate={handleMessageUpdate}
-                                            onMessageDelete={handleMessageDelete}
+                                            onMessageUpdate={
+                                                handleMessageUpdate
+                                            }
+                                            onMessageDelete={
+                                                handleMessageDelete
+                                            }
                                             state="message"
                                         />
                                     ))}
@@ -378,7 +417,14 @@ export const MainPage = (props: { userData: any }) => {
             </div>
 
             {showThread && selectedMessage && channelId && (
-                <div className="relative shrink-0" style={{ width: `${threadWidth}px`, minWidth: `${THREAD_MIN}px`, maxWidth: `${THREAD_MAX}px` }}>
+                <div
+                    className="relative shrink-0"
+                    style={{
+                        width: `${threadWidth}px`,
+                        minWidth: `${THREAD_MIN}px`,
+                        maxWidth: `${THREAD_MAX}px`,
+                    }}
+                >
                     {/* Left drag handle */}
                     <div
                         onMouseDown={onThreadDragStart}
