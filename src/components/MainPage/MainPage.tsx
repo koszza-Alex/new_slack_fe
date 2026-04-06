@@ -22,7 +22,7 @@ export const MainPage = (props: { userData: User | null }) => {
     const { socket } = useSocket();
     const { messages: msg, setMessages, appendMessage } = useMessageStore();
     const [loading, setLoading] = useState(true);
-
+    const { flag } = useMessageStore();
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const searchparams = useSearchParams();
     const messageId = searchparams.get("messageId");
@@ -191,49 +191,52 @@ export const MainPage = (props: { userData: User | null }) => {
     return (
         <div className="flex h-full overflow-hidden">
             <div className="flex-1 min-w-0 h-full bg-white">
-                <MainTopBar />
-                <MainBar />
-
-                <div className="w-full relative h-[calc(100vh-133px)] flex flex-col justify-between">
-                    <div className="h-full overflow-y-scroll flex flex-col">
-                        <Introduction />
-                        {Object.entries(groupedMessages).map(([date, messages]) => (
-                            <div key={date}>
-                                <DividerDate date={date} />
-                                {messages.map((item: any) => (
-                                    <SlackMessage
-                                        key={item.id}
-                                        id={`msg-${item.id}`}
-                                        avatar={getAvatarUrl(item.sender?.avatar)}
-                                        username={getDisplayName(item.sender)}
-                                        time={item.createdAt}
-                                        createdAt={item.createdAt}
-                                        updatedAt={item.updatedAt}
-                                        text={item.content}
-                                        messageId={item.id}
-                                        channelId={channelId ?? ""}
-                                        currentUserId={props.userData?.id ?? null}
-                                        senderId={item.sender?.id}
-                                        files={item.files ?? []}
-                                        reactions={item.reactions ?? []}
-                                        replies={item.replyCount ?? 0}
-                                        lastReply={formatLastReply(item.lastReplyAt)}
-                                        onCommentClick={() => handleCommentClick(item)}
-                                        onReactionUpdate={handleReactionUpdate}
-                                        onMessageUpdate={handleMessageUpdate}
-                                        onMessageDelete={handleMessageDelete}
-                                        state="message"
-                                    />
+                {flag === "Threads" ? <div></div> :
+                    <div>
+                        <MainTopBar />
+                        <MainBar />
+                        <div className="w-full relative h-[calc(100vh-133px)] flex flex-col justify-between">
+                            <div className="h-full overflow-y-scroll flex flex-col">
+                                <Introduction />
+                                {Object.entries(groupedMessages).map(([date, messages]) => (
+                                    <div key={date}>
+                                        <DividerDate date={date} />
+                                        {messages.map((item: any) => (
+                                            <SlackMessage
+                                                key={item.id}
+                                                id={`msg-${item.id}`}
+                                                avatar={getAvatarUrl(item.sender?.avatar)}
+                                                username={getDisplayName(item.sender)}
+                                                time={item.createdAt}
+                                                createdAt={item.createdAt}
+                                                updatedAt={item.updatedAt}
+                                                text={item.content}
+                                                messageId={item.id}
+                                                channelId={channelId ?? ""}
+                                                currentUserId={props.userData?.id ?? null}
+                                                senderId={item.sender?.id}
+                                                files={item.files ?? []}
+                                                reactions={item.reactions ?? []}
+                                                replies={item.replyCount ?? 0}
+                                                lastReply={formatLastReply(item.lastReplyAt)}
+                                                onCommentClick={() => handleCommentClick(item)}
+                                                onReactionUpdate={handleReactionUpdate}
+                                                onMessageUpdate={handleMessageUpdate}
+                                                onMessageDelete={handleMessageDelete}
+                                                state="message"
+                                            />
+                                        ))}
+                                    </div>
                                 ))}
+                                <div ref={bottomRef} />
                             </div>
-                        ))}
-                        <div ref={bottomRef} />
-                    </div>
 
-                    <div className="w-full z-10 px-4 pb-4">
-                        <MessageEditor userData={props.userData} />
+                            <div className="w-full z-10 px-4 pb-4">
+                                <MessageEditor userData={props.userData} />
+                            </div>
+                        </div>
                     </div>
-                </div>
+                }
             </div>
 
             {showThread && selectedMessage && channelId && (

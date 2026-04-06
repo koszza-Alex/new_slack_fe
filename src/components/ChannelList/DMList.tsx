@@ -9,6 +9,7 @@ import { FiPlus } from "react-icons/fi";
 import NewDmModal from "../DmPage/NewDmModal";
 import SidebarSection from "./SidebarSection";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import { useMessageStore } from "@/store/message-store";
 import { getAvatarUrl, getDisplayName } from "@/lib/messageUtils";
 
 export default function DMList() {
@@ -20,6 +21,7 @@ export default function DMList() {
     const [showModal, setShowModal] = useState(false);
 
     // Shared presence store — same source of truth as WorkspaceMenu
+    const { setFlag, flag } = useMessageStore();
     const { isOnline } = usePresenceStore();
 
     const loadConversations = () => {
@@ -44,6 +46,11 @@ export default function DMList() {
         loadConversations();
     };
 
+    const pageNation = (id:string) => {
+        router.push(`/${workspaceId}/dm/${id}`)
+        setFlag("")
+    }
+
     return (
         <>
             <SidebarSection title="Direct Messages" onAdd={() => setShowModal(true)}>
@@ -52,6 +59,7 @@ export default function DMList() {
                 ) : (
                     conversations.map((conv) => {
                         const isActive =
+                            !flag &&
                             typeof window !== "undefined" &&
                             window.location.pathname.includes(conv.id);
 
@@ -61,7 +69,7 @@ export default function DMList() {
                         return (
                             <button
                                 key={conv.id}
-                                onClick={() => router.push(`/${workspaceId}/dm/${conv.id}`)}
+                                onClick={() => pageNation(conv.id)}
                                 className={`group w-full flex items-center gap-2 px-7 py-1 rounded cursor-pointer text-left ${
                                     isActive
                                         ? "bg-[#f9edff] text-[#39063a] font-medium"

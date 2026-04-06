@@ -11,6 +11,7 @@ import EditChannelModal from "../ui/modal/EditChannelModal";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/Authcontext";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import { useMessageStore } from "@/store/message-store";
 
 interface ChannelItemProps {
   name: string;
@@ -26,13 +27,14 @@ export default function ChannelItem({ name, id, type, creatorId, currentUserId }
   const params = useParams();
   const [editOpen, setEditOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { setFlag, flag } = useMessageStore();
 
   const workspaceId = useWorkspaceId();
   const channelId = Array.isArray(params.channelId)
     ? params.channelId[0]
     : params.channelId;
 
-  const isActive = channelId === id;
+  const isActive = channelId === id && !flag;
   const isCreator = !!currentUserId && (creatorId === null || creatorId === currentUserId);
 
   // Auto-dismiss error after 3 s
@@ -78,6 +80,7 @@ export default function ChannelItem({ name, id, type, creatorId, currentUserId }
 
   const linkChannel = () => {
     router.push(`/${workspaceId}/${id}`);
+    setFlag("")
   };
 
   return (

@@ -5,18 +5,22 @@ import {
   FiHeadphones,
   FiMessageCircle,
   FiSettings,
+  FiSend
 } from "react-icons/fi";
 import { TbAddressBook } from "react-icons/tb";
 import { useEffect, useState } from "react";
+import { useMessageStore } from "@/store/message-store";
 
 const items = [
   { label: "Threads", icon: FiMessageCircle },
   { label: "Huddles", icon: FiHeadphones },
+  { label: "Drafts % Sent", icon: FiSend },
   { label: "Directories", icon: TbAddressBook },
 ];
 
 export default function WorkspaceHeader() {
-  const [workspaceName, setWorkspaceName] = useState();
+  const [workspaceName, setWorkspaceName] = useState<string | null>(null);
+  const { setFlag, flag } = useMessageStore();
   useEffect(() => {
     const name = localStorage.getItem("workspaceName");
     setWorkspaceName(name);
@@ -46,7 +50,12 @@ export default function WorkspaceHeader() {
         return (
           <div
             key={item.label}
-            className="flex items-center gap-3 px-2 py-1.5 rounded-md text-white/80 hover:bg-white/10 hover:text-white cursor-pointer transition"
+            onClick={() => setFlag(item.label)}
+            className={`flex items-center gap-3 px-2 py-1.5 rounded-md cursor-pointer transition ${
+              flag === item.label
+                ? "bg-white text-[rgb(92,42,92)]"
+                : "text-white/80 hover:bg-white/10 hover:text-white"
+            }`}
           >
             <Icon size={16} />
             <span className="text-sm">{item.label}</span>
