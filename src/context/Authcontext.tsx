@@ -2,10 +2,12 @@
 
 import { createContext, useContext, useState, ReactNode } from "react";
 
-type User = {
+export type User = {
   id: string;
   email: string;
   fullname: string;
+  dispname?: string | null;
+  avatar?: string | null;
 };
 
 type AuthContextType = {

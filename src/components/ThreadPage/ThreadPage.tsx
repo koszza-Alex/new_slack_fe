@@ -11,7 +11,7 @@ import SlackMessage from "../ui/message/Message";
 interface UserData {
   id: string;
   dispname?: string | null;
-  avatar?: string;
+  avatar?: string | null;
 }
 
 interface ThreadProps {
@@ -26,7 +26,7 @@ interface ThreadProps {
   /** DM-specific edit override — returns updatedAt on success */
   onDmEditSave?: (messageId: string, content: string) => Promise<string>;
   /** DM-specific delete override */
-  onDmDeleteConfirm?: (messageId: string) => Promise<void>;
+  onDmDeleteConfirm?: (messageId: string) => Promise<any>;
 }
 
 export const Thread: React.FC<ThreadProps> = ({

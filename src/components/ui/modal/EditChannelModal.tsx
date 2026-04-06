@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { FiHash, FiX } from "react-icons/fi";
 import { useSocket } from "@/providers/SocketProvider";
+import ModalOverlay from "./ModalOverlay";
 
 export default function EditChannelModal({
   isOpen,
@@ -40,22 +41,14 @@ export default function EditChannelModal({
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50">
-      {/* BACKDROP */}
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-      />
-
-      {/* MODAL */}
-      <div className="relative bg-white w-[400px] p-5 rounded-lg z-10">
-        {/* HEADER */}
-        <div className="flex justify-between mb-3">
-          <h2 className="font-bold text-black">Edit Channel</h2>
-          <button onClick={onClose}>
-            <FiX className="text-gray-500" size={18} />
-          </button>
-        </div>
+    <ModalOverlay onClose={onClose} className="w-[400px] p-5">
+      {/* HEADER */}
+      <div className="flex justify-between mb-3">
+        <h2 className="font-bold text-black">Edit Channel</h2>
+        <button onClick={onClose}>
+          <FiX className="text-gray-500" size={18} />
+        </button>
+      </div>
 
         {/* NAME INPUT */}
         <label className="text-sm font-semibold text-gray-800">
@@ -135,7 +128,6 @@ export default function EditChannelModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalOverlay>
   );
 }

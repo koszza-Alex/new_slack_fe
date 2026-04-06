@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import EditChannelModal from "../ui/modal/EditChannelModal";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/Authcontext";
+import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 
 interface ChannelItemProps {
   name: string;
@@ -26,9 +27,7 @@ export default function ChannelItem({ name, id, type, creatorId, currentUserId }
   const [editOpen, setEditOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const workspaceId = Array.isArray(params.workspaceId)
-    ? params.workspaceId[0]
-    : params.workspaceId;
+  const workspaceId = useWorkspaceId();
   const channelId = Array.isArray(params.channelId)
     ? params.channelId[0]
     : params.channelId;

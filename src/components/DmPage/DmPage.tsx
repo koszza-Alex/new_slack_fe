@@ -18,25 +18,19 @@ import DividerDate from "@/components/ui/dividerdate/DividerDate";
 import { Thread } from "@/components/ThreadPage/ThreadPage";
 import { ReactionView } from "@/lib/api/reactions";
 import { useThreadStore } from "@/store/thread-store";
-import { useParams } from "next/navigation";
+import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import { useThreadResize } from "@/hooks/useThreadResize";
+import { getAvatarUrl, getDisplayName, formatLastReply, groupMessagesByDate, sortByDate } from "@/lib/messageUtils";
 import { useEffect, useRef, useState } from "react";
 
 interface DmPageProps {
     conversationId: string;
 }
 
-/**
- * DM conversation view.
- * Reuses SlackMessage, MessageEditor, Thread, DividerDate from the channel UI.
- * Reactions and threads work identically to channels.
- */
 export default function DmPage({ conversationId }: DmPageProps) {
     const { user } = useAuth();
     const { socket } = useSocket();
-    const params = useParams();
-    const workspaceId = Array.isArray(params.workspaceId)
-        ? params.workspaceId[0]
-        : params.workspaceId;
+    const workspaceId = useWorkspaceId();
 
     const [messages, setMessages] = useState<DmMessageItem[]>([]);
     const [conversation, setConversation] = useState<DmConversationItem | null>(null);
@@ -55,39 +49,10 @@ export default function DmPage({ conversationId }: DmPageProps) {
         removeThreadMessage,
     } = useThreadStore();
 
+    const { threadWidth, onDragStart: onThreadDragStart, THREAD_MIN, THREAD_MAX } = useThreadResize();
+
     // Close thread when the active DM conversation changes
-    useEffect(() => {
-        closeThread();
-    }, [conversationId]);
-
-    // Thread panel resizable width
-    const THREAD_MIN = 550;
-    const THREAD_MAX = 825; // ≈ 1.5 × 550
-    const [threadWidth, setThreadWidth] = useState(THREAD_MIN);
-    const threadDragging = useRef(false);
-    const threadStartX = useRef(0);
-    const threadStartWidth = useRef(THREAD_MIN);
-
-    const onThreadDragStart = (e: React.MouseEvent) => {
-        e.preventDefault();
-        threadDragging.current = true;
-        threadStartX.current = e.clientX;
-        threadStartWidth.current = threadWidth;
-
-        const onMove = (ev: MouseEvent) => {
-            if (!threadDragging.current) return;
-            const delta = threadStartX.current - ev.clientX;
-            const next = Math.min(THREAD_MAX, Math.max(THREAD_MIN, threadStartWidth.current + delta));
-            setThreadWidth(next);
-        };
-        const onUp = () => {
-            threadDragging.current = false;
-            window.removeEventListener("mousemove", onMove);
-            window.removeEventListener("mouseup", onUp);
-        };
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", onUp);
-    };
+    useEffect(() => { closeThread(); }, [conversationId]);
 
     // Load conversation info + root messages, and mark as read
     useEffect(() => {
@@ -102,7 +67,6 @@ export default function DmPage({ conversationId }: DmPageProps) {
                 setMessages(msgs);
                 const found = convs.find((c) => c.id === conversationId) ?? null;
                 setConversation(found);
-                // Mark as read when the conversation is opened
                 markDmConversationAsRead(workspaceId, conversationId, user.id).catch(() => {});
             })
             .catch(console.error)
@@ -115,75 +79,44 @@ export default function DmPage({ conversationId }: DmPageProps) {
 
         socket.emit("join_dm", conversationId);
 
-        // New root DM message
         socket.on("new_dm_message", (msg: DmMessageItem) => {
-            if (msg.parentId) return; // thread replies must not enter root list
+            if (msg.parentId) return;
             setMessages((prev) => [...prev, msg]);
         });
 
-        // Root message thread metadata updated (replyCount, lastReplyAt)
         socket.on("dm_thread_updated", (updatedRoot: DmMessageItem) => {
-            setMessages((prev) =>
-                prev.map((m) => (m.id === updatedRoot.id ? { ...m, ...updatedRoot } : m)),
-            );
+            setMessages((prev) => prev.map((m) => (m.id === updatedRoot.id ? { ...m, ...updatedRoot } : m)));
             updateRootMessage(updatedRoot as any);
         });
 
-        // Reaction update on any DM message in this conversation
         socket.on("dm_reaction_updated", (payload: { messageId: string; reactions: ReactionView[] }) => {
-            setMessages((prev) =>
-                prev.map((m) => (m.id === payload.messageId ? { ...m, reactions: payload.reactions } : m)),
-            );
+            setMessages((prev) => prev.map((m) => (m.id === payload.messageId ? { ...m, reactions: payload.reactions } : m)));
             updateThreadMessageReactions(payload.messageId, payload.reactions);
         });
 
-        // Real-time edit from another client in this DM conversation
         socket.on("dmMessageEdited", (payload: { messageId: string; content: string; updatedAt: string }) => {
-            setMessages((prev) =>
-                prev.map((m) =>
-                    m.id === payload.messageId
-                        ? { ...m, content: payload.content, updatedAt: payload.updatedAt }
-                        : m,
-                ),
-            );
+            setMessages((prev) => prev.map((m) => m.id === payload.messageId ? { ...m, content: payload.content, updatedAt: payload.updatedAt } : m));
             updateThreadMessageContent(payload.messageId, payload.content, payload.updatedAt);
         });
 
-        // Real-time deletion from another client in this DM conversation
         socket.on("dmMessageDeleted", (payload: { messageId: string }) => {
             setMessages((prev) => prev.filter((m) => m.id !== payload.messageId));
             removeThreadMessage(payload.messageId);
         });
 
-        // Profile update — refresh sender name/avatar on any message in this conversation
         socket.on("updated_profile", (data: { userId?: string; id?: string; dispname?: string; avatar?: string }) => {
             const updatedUserId = data?.userId ?? data?.id;
             if (!updatedUserId) return;
             setMessages((prev) =>
                 prev.map((m) =>
                     m.senderId === updatedUserId
-                        ? {
-                              ...m,
-                              sender: {
-                                  ...m.sender,
-                                  dispname: data.dispname ?? m.sender?.dispname ?? null,
-                                  avatar: data.avatar ?? m.sender?.avatar ?? "/uploads/avatar.png",
-                              },
-                          }
+                        ? { ...m, sender: { ...m.sender, dispname: data.dispname ?? m.sender?.dispname ?? null, avatar: data.avatar ?? m.sender?.avatar ?? "/uploads/avatar.png" } }
                         : m,
                 ),
             );
-            // Also update the conversation header if the other user changed their profile
             setConversation((prev) => {
                 if (!prev || prev.otherUser?.id !== updatedUserId) return prev;
-                return {
-                    ...prev,
-                    otherUser: {
-                        ...prev.otherUser,
-                        dispname: data.dispname ?? prev.otherUser.dispname,
-                        avatar: data.avatar ?? prev.otherUser.avatar,
-                    },
-                };
+                return { ...prev, otherUser: { ...prev.otherUser, dispname: data.dispname ?? prev.otherUser.dispname, avatar: data.avatar ?? prev.otherUser.avatar } };
             });
         });
 
@@ -197,12 +130,10 @@ export default function DmPage({ conversationId }: DmPageProps) {
         };
     }, [socket, conversationId, updateRootMessage, updateThreadMessageReactions]);
 
-    // Auto-scroll to bottom
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    // Open thread for a DM message — fetches thread from DM-specific endpoint
     const handleCommentClick = async (message: DmMessageItem) => {
         openThread(message as any);
         try {
@@ -215,14 +146,11 @@ export default function DmPage({ conversationId }: DmPageProps) {
         }
     };
 
-    // Reaction toggle for DM messages — calls DM-specific endpoint then broadcasts via socket
     const handleReactionUpdate = async (messageId: string, emoji: string) => {
         if (!user?.id || !workspaceId) return;
         try {
             const result = await toggleDmReaction(workspaceId, conversationId, messageId, emoji, user.id);
-            setMessages((prev) =>
-                prev.map((m) => (m.id === messageId ? { ...m, reactions: result.reactions } : m)),
-            );
+            setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, reactions: result.reactions } : m)));
             updateThreadMessageReactions(messageId, result.reactions);
             socket?.emit("toggle_dm_reaction", { conversationId, messageId, reactions: result.reactions });
         } catch (err) {
@@ -232,26 +160,21 @@ export default function DmPage({ conversationId }: DmPageProps) {
 
     const handleDmMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
         setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: newContent, updatedAt: newUpdatedAt } : m)));
-        // Broadcast edit to other subscribers in this DM conversation
-        socket?.emit('dm_message_edit', { conversationId, messageId, content: newContent, updatedAt: newUpdatedAt });
+        socket?.emit("dm_message_edit", { conversationId, messageId, content: newContent, updatedAt: newUpdatedAt });
     };
 
     const handleDmMessageDelete = (messageId: string, updatedRoot?: any) => {
-        // Filter out the deleted message and optionally update the root's replyCount in one pass
-        setMessages((prev) => prev.filter((m) => m.id !== messageId).map((m) =>
-            updatedRoot && m.id === updatedRoot.id
-                ? { ...m, replyCount: updatedRoot.replyCount, lastReplyAt: updatedRoot.lastReplyAt }
-                : m
-        ));
-        // Broadcast deletion to other subscribers in this DM conversation
-        socket?.emit('dm_message_delete', { conversationId, messageId, updatedRoot });
-        // Update the thread store's root message replyCount for the deleting client
-        if (updatedRoot) {
-            updateRootMessage(updatedRoot as any);
-        }
+        setMessages((prev) =>
+            prev.filter((m) => m.id !== messageId).map((m) =>
+                updatedRoot && m.id === updatedRoot.id
+                    ? { ...m, replyCount: updatedRoot.replyCount, lastReplyAt: updatedRoot.lastReplyAt }
+                    : m,
+            ),
+        );
+        socket?.emit("dm_message_delete", { conversationId, messageId, updatedRoot });
+        if (updatedRoot) updateRootMessage(updatedRoot as any);
     };
 
-    /** DM-specific edit fetch — returns updatedAt on success */
     const dmEditSave = async (messageId: string, content: string): Promise<string> => {
         const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const res = await fetch(
@@ -267,7 +190,6 @@ export default function DmPage({ conversationId }: DmPageProps) {
         return data?.updatedAt ?? new Date().toISOString();
     };
 
-    /** DM-specific delete fetch — returns updatedRoot if the deleted message was a reply */
     const dmDeleteConfirm = async (messageId: string): Promise<{ updatedRoot: any | null }> => {
         const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const res = await fetch(
@@ -283,47 +205,10 @@ export default function DmPage({ conversationId }: DmPageProps) {
         return { updatedRoot: data?.updatedRoot ?? null };
     };
 
-    // ── helpers ───────────────────────────────────────────────────────────────
+    const groupedMessages = groupMessagesByDate(sortByDate(messages));
 
-    const groupMessagesByDate = (msgs: DmMessageItem[]) => {
-        const groups: Record<string, DmMessageItem[]> = {};
-        msgs.forEach((m) => {
-            const date = new Date(m.createdAt).toDateString();
-            if (!groups[date]) groups[date] = [];
-            groups[date].push(m);
-        });
-        return groups;
-    };
-
-    const sortedMessages = [...messages].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-    const groupedMessages = groupMessagesByDate(sortedMessages);
-
-    const getDisplayName = (sender: DmMessageItem["sender"]) =>
-        sender?.dispname || sender?.email || "User";
-
-    const getAvatarUrl = (sender: DmMessageItem["sender"]) =>
-        `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}${sender?.avatar ?? "/uploads/avatar.png"}`;
-
-    const formatLastReply = (lastReplyAt: string | null) => {
-        if (!lastReplyAt) return "";
-        const diff = Date.now() - new Date(lastReplyAt).getTime();
-        const hours = Math.floor(diff / 3600000);
-        if (hours < 1) return "just now";
-        if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
-        const days = Math.floor(hours / 24);
-        return `${days} day${days > 1 ? "s" : ""} ago`;
-    };
-
-    const otherUserName =
-        conversation?.otherUser?.dispname ||
-        conversation?.otherUser?.email ||
-        "Direct Message";
-
-    const otherUserAvatar = conversation?.otherUser?.avatar
-        ? `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}${conversation.otherUser.avatar}`
-        : `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}/uploads/avatar.png`;
+    const otherUserName = conversation?.otherUser?.dispname || conversation?.otherUser?.email || "Direct Message";
+    const otherUserAvatar = getAvatarUrl(conversation?.otherUser?.avatar);
 
     if (loading) return <SlackLoader />;
 
@@ -342,7 +227,7 @@ export default function DmPage({ conversationId }: DmPageProps) {
                     <span>Direct Message</span>
                 </div>
 
-                {/* Message list — same structure as channel view */}
+                {/* Message list */}
                 <div className="flex-1 overflow-y-scroll flex flex-col">
                     {messages.length === 0 ? (
                         <div className="flex items-center justify-center h-full text-gray-400 text-sm">
@@ -357,7 +242,7 @@ export default function DmPage({ conversationId }: DmPageProps) {
                                         key={item.id}
                                         id={`dm-msg-${item.id}`}
                                         state="message"
-                                        avatar={getAvatarUrl(item.sender)}
+                                        avatar={getAvatarUrl(item.sender?.avatar)}
                                         username={getDisplayName(item.sender)}
                                         time={item.createdAt}
                                         createdAt={item.createdAt}
@@ -388,18 +273,16 @@ export default function DmPage({ conversationId }: DmPageProps) {
 
                 {/* Editor */}
                 <div className="w-full z-10 px-4 pb-4 shrink-0">
-                    <MessageEditor
-                        userData={user}
-                        dmConversationId={conversationId}
-                        placeholder={`Message ${otherUserName}`}
-                    />
+                    <MessageEditor userData={user} dmConversationId={conversationId} placeholder={`Message ${otherUserName}`} />
                 </div>
             </div>
 
-            {/* Thread panel — reuses Thread.tsx with dmConversationId */}
+            {/* Thread panel */}
             {showThread && selectedMessage && (
-                <div className="relative shrink-0" style={{ width: `${threadWidth}px`, minWidth: `${THREAD_MIN}px`, maxWidth: `${THREAD_MAX}px` }}>
-                    {/* Left drag handle */}
+                <div
+                    className="relative shrink-0"
+                    style={{ width: `${threadWidth}px`, minWidth: `${THREAD_MIN}px`, maxWidth: `${THREAD_MAX}px` }}
+                >
                     <div
                         onMouseDown={onThreadDragStart}
                         className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-gray-300/50 transition-colors z-10"

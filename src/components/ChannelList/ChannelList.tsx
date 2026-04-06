@@ -5,9 +5,9 @@ import ChannelItem from "./ChannelItem";
 import { FiPlus } from "react-icons/fi";
 import { useEffect, useState } from "react";
 import CreateChannelModal from "../ui/modal/CreateChannelModal";
-import { useParams } from "next/navigation";
 import { useAuth } from "@/context/Authcontext";
 import { useSocket } from "@/providers/SocketProvider";
+import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 
 export default function ChannelListComponent() {
   const { socket } = useSocket();
@@ -15,11 +15,7 @@ export default function ChannelListComponent() {
   const [channels, setChannels] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const params = useParams();
-  const workspaceId = Array.isArray(params.workspaceId)
-    ? params.workspaceId[0]
-    : params.workspaceId;
-
+  const workspaceId = useWorkspaceId();
   const { user } = useAuth();
   const userId = user?.id;
 

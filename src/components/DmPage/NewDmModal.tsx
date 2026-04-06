@@ -2,9 +2,11 @@
 
 import { useAuth } from "@/context/Authcontext";
 import { getDmCandidates, getOrCreateDmConversation, DmCandidate } from "@/lib/api/dm";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FaTimes } from "react-icons/fa";
+import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import { getAvatarUrl } from "@/lib/messageUtils";
 
 interface NewDmModalProps {
     onClose: () => void;
@@ -13,10 +15,7 @@ interface NewDmModalProps {
 export default function NewDmModal({ onClose }: NewDmModalProps) {
     const { user } = useAuth();
     const router = useRouter();
-    const params = useParams();
-    const workspaceId = Array.isArray(params.workspaceId)
-        ? params.workspaceId[0]
-        : params.workspaceId;
+    const workspaceId = useWorkspaceId();
 
     const [candidates, setCandidates] = useState<DmCandidate[]>([]);
     const [search, setSearch] = useState("");
@@ -53,8 +52,7 @@ export default function NewDmModal({ onClose }: NewDmModalProps) {
         }
     };
 
-    const getAvatarUrl = (avatar: string) =>
-        `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}${avatar ?? "/uploads/avatar.png"}`;
+    const getAvatarUrlForCandidate = (avatar: string) => getAvatarUrl(avatar);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -96,7 +94,7 @@ export default function NewDmModal({ onClose }: NewDmModalProps) {
                                 className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition"
                             >
                                 <img
-                                    src={getAvatarUrl(c.avatar)}
+                                    src={getAvatarUrlForCandidate(c.avatar)}
                                     alt={c.dispname ?? c.email}
                                     className="w-8 h-8 rounded-lg shrink-0"
                                 />

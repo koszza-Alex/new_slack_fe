@@ -14,8 +14,11 @@ import DividerDate from "../ui/dividerdate/DividerDate";
 import Introduction from "../ui/introduction/Introduction";
 import SlackMessage from "../ui/message/Message";
 import MessageEditor from "../ui/messageEditor/MessageEditor";
+import { useThreadResize } from "@/hooks/useThreadResize";
+import { getAvatarUrl, getDisplayName, formatLastReply, groupMessagesByDate, sortByDate } from "@/lib/messageUtils";
+import type { User } from "@/context/Authcontext";
 
-export const MainPage = (props: { userData: any }) => {
+export const MainPage = (props: { userData: User | null }) => {
     const { socket } = useSocket();
     const { messages: msg, setMessages, appendMessage } = useMessageStore();
     const [loading, setLoading] = useState(true);
@@ -28,38 +31,7 @@ export const MainPage = (props: { userData: any }) => {
         ? params.channelId[0]
         : params.channelId;
 
-    // Thread panel resizable width
-    const THREAD_MIN = 550;
-    const THREAD_MAX = 825; // ≈ 1.5 × 550
-    const [threadWidth, setThreadWidth] = useState(THREAD_MIN);
-    const threadDragging = useRef(false);
-    const threadStartX = useRef(0);
-    const threadStartWidth = useRef(THREAD_MIN);
-
-    const onThreadDragStart = (e: React.MouseEvent) => {
-        e.preventDefault();
-        threadDragging.current = true;
-        threadStartX.current = e.clientX;
-        threadStartWidth.current = threadWidth;
-
-        const onMove = (ev: MouseEvent) => {
-            if (!threadDragging.current) return;
-            // Dragging left edge → moving left increases width
-            const delta = threadStartX.current - ev.clientX;
-            const next = Math.min(
-                THREAD_MAX,
-                Math.max(THREAD_MIN, threadStartWidth.current + delta),
-            );
-            setThreadWidth(next);
-        };
-        const onUp = () => {
-            threadDragging.current = false;
-            window.removeEventListener("mousemove", onMove);
-            window.removeEventListener("mouseup", onUp);
-        };
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", onUp);
-    };
+    const { threadWidth, onDragStart: onThreadDragStart, THREAD_MIN, THREAD_MAX } = useThreadResize();
 
     const {
         isOpen: showThread,
@@ -81,9 +53,7 @@ export const MainPage = (props: { userData: any }) => {
     const handleCommentClick = async (message: any) => {
         openThread(message);
         try {
-            const res = await api.get(
-                `/api/channels/${channelId}/messages/${message.id}/thread`,
-            );
+            const res = await api.get(`/api/channels/${channelId}/messages/${message.id}/thread`);
             setThreadMessages(res.data);
         } catch (err) {
             console.error("Failed to load thread:", err);
@@ -95,12 +65,7 @@ export const MainPage = (props: { userData: any }) => {
         if (!channelId) return;
         const loadMessages = async () => {
             try {
-                const res = await api.get(
-                    `/api/channels/${channelId}/messages`,
-                );
-                // Defense-in-depth: only keep root messages (parentId === null)
-                // The backend already filters this, but guard here too so no thread
-                // reply can ever leak into the channel view.
+                const res = await api.get(`/api/channels/${channelId}/messages`);
                 const rootOnly = (res.data as any[]).filter((m) => !m.parentId);
                 setMessages(rootOnly);
             } finally {
@@ -116,69 +81,25 @@ export const MainPage = (props: { userData: any }) => {
         socket.emit("join_channel", channelId);
 
         socket.on("new_message", (newMsg: any) => {
-            // Only append root messages — thread replies must never enter this list
             if (newMsg.parentId) return;
             appendMessage(newMsg);
         });
 
         socket.on("thread_updated", (updatedRoot: any) => {
-            setMessages(
-                msg.map((m) =>
-                    m.id === updatedRoot.id ? { ...m, ...updatedRoot } : m,
-                ),
-            );
+            setMessages(msg.map((m) => m.id === updatedRoot.id ? { ...m, ...updatedRoot } : m));
             updateRootMessage(updatedRoot);
         });
 
-        // Real-time reaction updates from other clients.
-        // Payload: { messageId, reactions: ReactionView[] }
-        socket.on(
-            "reaction_updated",
-            (payload: { messageId: string; reactions: ReactionView[] }) => {
-                setMessages(
-                    msg.map((m) =>
-                        m.id === payload.messageId
-                            ? { ...m, reactions: payload.reactions }
-                            : m,
-                    ),
-                );
-                updateThreadMessageReactions(
-                    payload.messageId,
-                    payload.reactions,
-                );
-            },
-        );
+        socket.on("reaction_updated", (payload: { messageId: string; reactions: ReactionView[] }) => {
+            setMessages(msg.map((m) => m.id === payload.messageId ? { ...m, reactions: payload.reactions } : m));
+            updateThreadMessageReactions(payload.messageId, payload.reactions);
+        });
 
-        // Real-time message edit from other clients.
-        // Payload: { messageId, content, updatedAt }
-        socket.on(
-            "messageEdited",
-            (payload: {
-                messageId: string;
-                content: string;
-                updatedAt: string;
-            }) => {
-                setMessages(
-                    msg.map((m) =>
-                        m.id === payload.messageId
-                            ? {
-                                  ...m,
-                                  content: payload.content,
-                                  updatedAt: payload.updatedAt,
-                              }
-                            : m,
-                    ),
-                );
-                updateThreadMessageContent(
-                    payload.messageId,
-                    payload.content,
-                    payload.updatedAt,
-                );
-            },
-        );
+        socket.on("messageEdited", (payload: { messageId: string; content: string; updatedAt: string }) => {
+            setMessages(msg.map((m) => m.id === payload.messageId ? { ...m, content: payload.content, updatedAt: payload.updatedAt } : m));
+            updateThreadMessageContent(payload.messageId, payload.content, payload.updatedAt);
+        });
 
-        // Real-time message deletion from other clients.
-        // Payload: { messageId }
         socket.on("messageDeleted", (payload: { messageId: string }) => {
             setMessages(msg.filter((m) => m.id !== payload.messageId));
             removeThreadMessage(payload.messageId);
@@ -191,42 +112,18 @@ export const MainPage = (props: { userData: any }) => {
             socket.off("messageEdited");
             socket.off("messageDeleted");
         };
-    }, [
-        socket,
-        channelId,
-        msg,
-        updateRootMessage,
-        updateThreadMessageReactions,
-    ]);
-    const scrollToMessage = (messageId: string) => {
+    }, [socket, channelId, msg, updateRootMessage, updateThreadMessageReactions]);
+
+    const scrollToMessage = (msgId: string) => {
         setTimeout(() => {
-            const element = document.getElementById(`msg-${messageId}`);
-            if (!element) {
-                console.warn(`No element found with id msg-${messageId}`);
-                return;
-            }
-
+            const element = document.getElementById(`msg-${msgId}`);
+            if (!element) return;
             element.scrollIntoView({ behavior: "smooth", block: "center" });
-
-            const highlightClasses = [
-                "bg-blue-100",
-                "border-2",
-                "border-yellow-400",
-                "rounded-lg",
-                "shadow-lg",
-                "transition-all",
-                "duration-300",
-            ];
-
-            element.classList.remove(...highlightClasses);
+            const classes = ["bg-blue-100", "border-2", "border-yellow-400", "rounded-lg", "shadow-lg", "transition-all", "duration-300"];
+            element.classList.remove(...classes);
             void element.offsetWidth;
-
-            element.classList.add(...highlightClasses);
-
-            // Remove highlight after 3 seconds
-            setTimeout(() => {
-                element.classList.remove(...highlightClasses);
-            }, 3000);
+            element.classList.add(...classes);
+            setTimeout(() => element.classList.remove(...classes), 3000);
         }, 100);
     };
 
@@ -235,118 +132,44 @@ export const MainPage = (props: { userData: any }) => {
     }, [msg]);
 
     useEffect(() => {
-        if (messageId) {
-            scrollToMessage(messageId);
-        }
+        if (messageId) scrollToMessage(messageId);
     }, [messageId]);
-    const groupMessagesByDate = (messages: any[]) => {
-        const groups: Record<string, any[]> = {};
-        messages.forEach((m) => {
-            const date = new Date(m.createdAt).toDateString();
-            if (!groups[date]) groups[date] = [];
-            groups[date].push(m);
-        });
-        return groups;
-    };
 
-    // Sort root messages oldest → newest, then group by date
-    const sortedMessages = [...msg].sort(
-        (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-    const groupedMessages = groupMessagesByDate(sortedMessages);
+    const groupedMessages = groupMessagesByDate(sortByDate(msg));
 
-    const userMap = useRef<Record<string, number>>({});
-    const userCounter = useRef(1);
-
-    const getDisplayName = (sender: any) => {
-        if (sender?.dispname) return sender.dispname;
-        const id = sender?.id;
-        if (!userMap.current[id]) userMap.current[id] = userCounter.current++;
-        return `Slack_User${String(userMap.current[id]).padStart(2, "0")}`;
-    };
-
-    const formatLastReply = (lastReplyAt: string | null) => {
-        if (!lastReplyAt) return "";
-        const diff = Date.now() - new Date(lastReplyAt).getTime();
-        const hours = Math.floor(diff / 3600000);
-        if (hours < 1) return "just now";
-        if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
-        const days = Math.floor(hours / 24);
-        return `${days} day${days > 1 ? "s" : ""} ago`;
-    };
-
-    const handleReactionUpdate = (
-        messageId: string,
-        reactions: ReactionView[],
-    ) => {
-        setMessages(
-            msg.map((m) => (m.id === messageId ? { ...m, reactions } : m)),
-        );
+    const handleReactionUpdate = (messageId: string, reactions: ReactionView[]) => {
+        setMessages(msg.map((m) => (m.id === messageId ? { ...m, reactions } : m)));
         updateThreadMessageReactions(messageId, reactions);
         if (socket && channelId) {
             socket.emit("toggle_reaction", { channelId, messageId, reactions });
         }
     };
 
-    const handleMessageUpdate = (
-        messageId: string,
-        newContent: string,
-        newUpdatedAt: string,
-    ) => {
-        setMessages(
-            msg.map((m) =>
-                m.id === messageId
-                    ? { ...m, content: newContent, updatedAt: newUpdatedAt }
-                    : m,
-            ),
-        );
-        // Broadcast edit to other subscribers in this channel
+    const handleMessageUpdate = (messageId: string, newContent: string, newUpdatedAt: string) => {
+        setMessages(msg.map((m) => m.id === messageId ? { ...m, content: newContent, updatedAt: newUpdatedAt } : m));
         if (socket && channelId) {
-            socket.emit("message_edit", {
-                channelId,
-                messageId,
-                content: newContent,
-                updatedAt: newUpdatedAt,
-            });
+            socket.emit("message_edit", { channelId, messageId, content: newContent, updatedAt: newUpdatedAt });
         }
     };
 
     const handleMessageDelete = (messageId: string, updatedRoot?: any) => {
-        // Filter out the deleted message and optionally update the root's replyCount in one pass
         setMessages(
-            msg
-                .filter((m) => m.id !== messageId)
-                .map((m) =>
-                    updatedRoot && m.id === updatedRoot.id
-                        ? {
-                              ...m,
-                              replyCount: updatedRoot.replyCount,
-                              lastReplyAt: updatedRoot.lastReplyAt,
-                          }
-                        : m,
-                ),
+            msg.filter((m) => m.id !== messageId).map((m) =>
+                updatedRoot && m.id === updatedRoot.id
+                    ? { ...m, replyCount: updatedRoot.replyCount, lastReplyAt: updatedRoot.lastReplyAt }
+                    : m,
+            ),
         );
-        // Broadcast deletion to other subscribers in this channel
         if (socket && channelId) {
-            socket.emit("message_delete", {
-                channelId,
-                messageId,
-                updatedRoot,
-            });
+            socket.emit("message_delete", { channelId, messageId, updatedRoot });
         }
-        // Update the thread store's root message replyCount for the deleting client
-        if (updatedRoot) {
-            updateRootMessage(updatedRoot);
-        }
+        if (updatedRoot) updateRootMessage(updatedRoot);
     };
 
     if (!channelId)
         return (
             <div className="flex flex-col items-center justify-center h-full bg-gray-100">
-                <h1 className="font-weight-bold text-[100px]">
-                    Welcome to our slack!!!
-                </h1>
+                <h1 className="font-weight-bold text-[100px]">Welcome to our slack!!!</h1>
             </div>
         );
 
@@ -361,52 +184,36 @@ export const MainPage = (props: { userData: any }) => {
                 <div className="w-full relative h-[calc(100vh-133px)] flex flex-col justify-between">
                     <div className="h-full overflow-y-scroll flex flex-col">
                         <Introduction />
-                        {Object.entries(groupedMessages).map(
-                            ([date, messages]) => (
-                                <div key={date}>
-                                    <DividerDate date={date} />
-                                    {messages.map((item: any) => (
-                                        <SlackMessage
-                                            key={item.id}
-                                            id={`msg-${item.id}`}
-                                            avatar={`${process.env.NEXT_PUBLIC_SOCKET_URL}${item.sender?.avatar ?? "/uploads/avatar.png"}`}
-                                            username={getDisplayName(
-                                                item.sender,
-                                            )}
-                                            time={item.createdAt}
-                                            createdAt={item.createdAt}
-                                            updatedAt={item.updatedAt}
-                                            text={item.content}
-                                            messageId={item.id}
-                                            channelId={channelId ?? ""}
-                                            currentUserId={
-                                                props.userData?.id ?? null
-                                            }
-                                            senderId={item.sender?.id}
-                                            files={item.files ?? []}
-                                            reactions={item.reactions ?? []}
-                                            replies={item.replyCount ?? 0}
-                                            lastReply={formatLastReply(
-                                                item.lastReplyAt,
-                                            )}
-                                            onCommentClick={() =>
-                                                handleCommentClick(item)
-                                            }
-                                            onReactionUpdate={
-                                                handleReactionUpdate
-                                            }
-                                            onMessageUpdate={
-                                                handleMessageUpdate
-                                            }
-                                            onMessageDelete={
-                                                handleMessageDelete
-                                            }
-                                            state="message"
-                                        />
-                                    ))}
-                                </div>
-                            ),
-                        )}
+                        {Object.entries(groupedMessages).map(([date, messages]) => (
+                            <div key={date}>
+                                <DividerDate date={date} />
+                                {messages.map((item: any) => (
+                                    <SlackMessage
+                                        key={item.id}
+                                        id={`msg-${item.id}`}
+                                        avatar={getAvatarUrl(item.sender?.avatar)}
+                                        username={getDisplayName(item.sender)}
+                                        time={item.createdAt}
+                                        createdAt={item.createdAt}
+                                        updatedAt={item.updatedAt}
+                                        text={item.content}
+                                        messageId={item.id}
+                                        channelId={channelId ?? ""}
+                                        currentUserId={props.userData?.id ?? null}
+                                        senderId={item.sender?.id}
+                                        files={item.files ?? []}
+                                        reactions={item.reactions ?? []}
+                                        replies={item.replyCount ?? 0}
+                                        lastReply={formatLastReply(item.lastReplyAt)}
+                                        onCommentClick={() => handleCommentClick(item)}
+                                        onReactionUpdate={handleReactionUpdate}
+                                        onMessageUpdate={handleMessageUpdate}
+                                        onMessageDelete={handleMessageDelete}
+                                        state="message"
+                                    />
+                                ))}
+                            </div>
+                        ))}
                         <div ref={bottomRef} />
                     </div>
 
@@ -419,22 +226,13 @@ export const MainPage = (props: { userData: any }) => {
             {showThread && selectedMessage && channelId && (
                 <div
                     className="relative shrink-0"
-                    style={{
-                        width: `${threadWidth}px`,
-                        minWidth: `${THREAD_MIN}px`,
-                        maxWidth: `${THREAD_MAX}px`,
-                    }}
+                    style={{ width: `${threadWidth}px`, minWidth: `${THREAD_MIN}px`, maxWidth: `${THREAD_MAX}px` }}
                 >
-                    {/* Left drag handle */}
                     <div
                         onMouseDown={onThreadDragStart}
                         className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-gray-300/50 transition-colors z-10"
                     />
-                    <Thread
-                        onCloseThread={closeThread}
-                        userData={props.userData}
-                        channelId={channelId}
-                    />
+                    <Thread onCloseThread={closeThread} userData={props.userData} channelId={channelId} />
                 </div>
             )}
         </div>

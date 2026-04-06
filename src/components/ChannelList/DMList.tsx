@@ -3,19 +3,18 @@
 import { useAuth } from "@/context/Authcontext";
 import { getDmConversations, DmConversationItem } from "@/lib/api/dm";
 import { usePresenceStore, presenceColor } from "@/store/presence-store";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FiPlus } from "react-icons/fi";
 import NewDmModal from "../DmPage/NewDmModal";
 import SidebarSection from "./SidebarSection";
+import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import { getAvatarUrl, getDisplayName } from "@/lib/messageUtils";
 
 export default function DMList() {
     const { user } = useAuth();
     const router = useRouter();
-    const params = useParams();
-    const workspaceId = Array.isArray(params.workspaceId)
-        ? params.workspaceId[0]
-        : params.workspaceId;
+    const workspaceId = useWorkspaceId();
 
     const [conversations, setConversations] = useState<DmConversationItem[]>([]);
     const [showModal, setShowModal] = useState(false);
@@ -34,11 +33,11 @@ export default function DMList() {
         loadConversations();
     }, [workspaceId, user?.id]);
 
-    const getAvatarUrl = (avatar: string | undefined) =>
-        `${process.env.NEXT_PUBLIC_SOCKET_URL ?? ""}${avatar ?? "/uploads/avatar.png"}`;
+    const getAvatarUrlForConv = (avatar: string | undefined) =>
+        getAvatarUrl(avatar);
 
-    const getDisplayName = (conv: DmConversationItem) =>
-        conv.otherUser?.dispname || conv.otherUser?.email || "Unknown";
+    const getDisplayNameForConv = (conv: DmConversationItem) =>
+        getDisplayName(conv.otherUser);
 
     const handleModalClose = () => {
         setShowModal(false);
@@ -72,8 +71,8 @@ export default function DMList() {
                                 {/* Avatar with presence dot */}
                                 <div className="relative shrink-0">
                                     <img
-                                        src={getAvatarUrl(conv.otherUser?.avatar)}
-                                        alt={getDisplayName(conv)}
+                                        src={getAvatarUrlForConv(conv.otherUser?.avatar)}
+                                        alt={getDisplayNameForConv(conv)}
                                         className="w-5 h-5 rounded"
                                     />
                                     {/* Presence dot — green = joined, #3F0E40 = unjoined */}
@@ -81,7 +80,7 @@ export default function DMList() {
                                         className={`absolute bottom-[-1px] right-[-1px] w-2 h-2 rounded-full border border-[rgb(92,42,92)] ${presenceColor(online)}`}
                                     />
                                 </div>
-                                <span className="text-sm truncate">{getDisplayName(conv)}</span>
+                                <span className="text-sm truncate">{getDisplayNameForConv(conv)}</span>
                             </button>
                         );
                     })
