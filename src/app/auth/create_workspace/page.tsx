@@ -50,9 +50,15 @@ export default function SlackClonePage() {
 
       const result = await response.json();
 
-      console.log(result)
+      if (!response.ok || !result.workspace?.id) {
+        console.error("Registration failed:", result);
+        setIsSubmitting(false);
+        return;
+      }
+
       localStorage.setItem("token", result.token);
-      localStorage.setItem("workspaceId",result.workspace.id)
+      localStorage.setItem("workspaceId", result.workspace.id);
+      localStorage.setItem("workspaceName", result.workspace.name ?? workspaceName);
     
 
       // ✅ small delay so user sees loading
