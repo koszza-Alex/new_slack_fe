@@ -1,22 +1,22 @@
 "use client";
 
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPlus } from "@fortawesome/free-solid-svg-icons";
+import { FiPlus } from "react-icons/fi";
+import { IconType } from "react-icons";
 
 type ButtonProps = {
   label?: string;
   onClick?: () => void;
 
-  bgColor?: string;        
-  hoverColor?: string;     
-  activeColor?: string;    
-  textColor?: string;      
-  width?: string
-  height?: string;         
-  paddingX?: string;       
-  radius?: string;         
+  bgColor?: string;
+  hoverColor?: string;
+  activeColor?: string;
+  textColor?: string;
+  width?: string;
+  height?: string;
+  paddingX?: string;
+  radius?: string;
   showIcon?: boolean;
-  icon?: any;
+  icon?: IconType;
 };
 
 export default function CustomButton({
@@ -33,7 +33,7 @@ export default function CustomButton({
   radius = "rounded-[6px]",
 
   showIcon = true,
-  icon = faPlus,
+  icon: Icon = FiPlus,
 }: ButtonProps) {
   return (
     <button
@@ -58,10 +58,7 @@ export default function CustomButton({
         cursor-pointer
       `}
     >
-      {showIcon && (
-        <FontAwesomeIcon icon={icon} className="text-[12px]" />
-      )}
-
+      {showIcon && <Icon size={12} />}
       <span>{label}</span>
     </button>
   );

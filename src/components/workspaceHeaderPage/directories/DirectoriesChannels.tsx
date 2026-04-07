@@ -2,10 +2,10 @@
 
 import { useState, useMemo } from "react";
 import CustomButton from "../component/channel_button";
-import FileSearch from "../../files/file_search";
+import FileSearch from "../component/file_search";
 import DirectoriesDropdownBtn from "./DirectoriesDropdownBtn";
 import { Channel } from "./domi";
-import { faLock } from "@fortawesome/free-solid-svg-icons";
+import { FiLock } from "react-icons/fi";
 import DirectoriesChannelsItem from "./DirectoriesChannelsItem";
 import BannerSection from "./BannerSection";
 
@@ -116,7 +116,7 @@ export default function DirectoriesChannel() {
                     {filteredData.map((item, i) => (
                         <DirectoriesChannelsItem
                             key={i}
-                            icon={faLock}
+                            icon={FiLock}
                             title={item.title}
                             comment={item.comment}
                             members={item.members}

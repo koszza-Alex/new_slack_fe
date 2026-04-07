@@ -23,6 +23,9 @@ import { useThreadResize } from "@/hooks/useThreadResize";
 import { getAvatarUrl, getDisplayName, formatLastReply, groupMessagesByDate, sortByDate } from "@/lib/messageUtils";
 import { useMessageStore } from "@/store/message-store";
 import { useEffect, useRef, useState } from "react";
+import Directories from "../workspaceHeaderPage/directories/directories";
+import { DraftsPage } from "../workspaceHeaderPage/Drapts&send/DraptsPage";
+import HuddlePage from "../workspaceHeaderPage/huddle/HuddlePage";
 
 interface DmPageProps {
     conversationId: string;
@@ -234,71 +237,69 @@ export default function DmPage({ conversationId }: DmPageProps) {
     return (
         <div className="flex h-full">
             {/* Main DM chat area */}
-            <div className="flex flex-col flex-1 h-full bg-white min-w-0">
-                {flag === "Threads" ? <div></div> :
-                    <div>
-                        {/* Header */}
-                        <div className="flex items-center gap-3 px-6 h-[49px] border-b border-gray-200 shrink-0">
-                            <img src={otherUserAvatar} alt={otherUserName} className="w-7 h-7 rounded-lg" />
-                            <span className="font-semibold text-gray-800 text-base">{otherUserName}</span>
-                        </div>
-
-                        {/* Sub-header */}
-                        <div className="w-full h-[44px] border-b border-gray-200 flex items-center px-4 text-gray-500 text-sm shrink-0">
-                            <span>Direct Message</span>
-                        </div>
-
-                        {/* Message list */}
-                        <div className="flex-1 overflow-y-scroll flex flex-col">
-                            {messages.length === 0 ? (
-                                <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-                                    No messages yet. Say hello!
-                                </div>
-                            ) : (
-                                Object.entries(groupedMessages).map(([date, msgs]) => (
-                                    <div key={date}>
-                                        <DividerDate date={date} />
-                                        {msgs.map((item) => (
-                                            <SlackMessage
-                                                key={item.id}
-                                                id={`dm-msg-${item.id}`}
-                                                state="message"
-                                                avatar={getAvatarUrl(item.sender?.avatar)}
-                                                username={getDisplayName(item.sender)}
-                                                time={item.createdAt}
-                                                createdAt={item.createdAt}
-                                                updatedAt={item.updatedAt}
-                                                text={item.content}
-                                                messageId={item.id}
-                                                channelId=""
-                                                currentUserId={user?.id ?? null}
-                                                senderId={item.senderId}
-                                                files={item.files ?? []}
-                                                reactions={item.reactions ?? []}
-                                                replies={item.replyCount ?? 0}
-                                                lastReply={formatLastReply(item.lastReplyAt)}
-                                                onCommentClick={() => handleCommentClick(item)}
-                                                onReactionUpdate={(_msgId, _reactions) => { }}
-                                                onDmReactionSelect={(emoji) => handleReactionUpdate(item.id, emoji)}
-                                                onMessageUpdate={handleDmMessageUpdate}
-                                                onMessageDelete={handleDmMessageDelete}
-                                                onEditSave={dmEditSave}
-                                                onDeleteConfirm={dmDeleteConfirm}
-                                            />
-                                        ))}
-                                    </div>
-                                ))
-                            )}
-                            <div ref={bottomRef} />
-                        </div>
-
-                        {/* Editor */}
-                        <div className="w-full z-10 px-4 pb-4 shrink-0">
-                            <MessageEditor userData={user} dmConversationId={conversationId} placeholder={`Message ${otherUserName}`} />
-                        </div>
+            {flag === "Threads" ? <div></div> :
+                <div className="flex flex-col flex-1 h-full bg-white min-w-0">
+                    {/* Header */}
+                    <div className="flex items-center gap-3 px-6 h-[49px] border-b border-gray-200 shrink-0">
+                        <img src={otherUserAvatar} alt={otherUserName} className="w-7 h-7 rounded-lg" />
+                        <span className="font-semibold text-gray-800 text-base">{otherUserName}</span>
                     </div>
-                }
-            </div>
+
+                    {/* Sub-header */}
+                    <div className="w-full h-[44px] border-b border-gray-200 flex items-center px-4 text-gray-500 text-sm shrink-0">
+                        <span>Direct Message</span>
+                    </div>
+
+                    {/* Message list */}
+                    <div className="flex-1 overflow-y-scroll flex flex-col">
+                        {messages.length === 0 ? (
+                            <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                                No messages yet. Say hello!
+                            </div>
+                        ) : (
+                            Object.entries(groupedMessages).map(([date, msgs]) => (
+                                <div key={date}>
+                                    <DividerDate date={date} />
+                                    {msgs.map((item) => (
+                                        <SlackMessage
+                                            key={item.id}
+                                            id={`dm-msg-${item.id}`}
+                                            state="message"
+                                            avatar={getAvatarUrl(item.sender?.avatar)}
+                                            username={getDisplayName(item.sender)}
+                                            time={item.createdAt}
+                                            createdAt={item.createdAt}
+                                            updatedAt={item.updatedAt}
+                                            text={item.content}
+                                            messageId={item.id}
+                                            channelId=""
+                                            currentUserId={user?.id ?? null}
+                                            senderId={item.senderId}
+                                            files={item.files ?? []}
+                                            reactions={item.reactions ?? []}
+                                            replies={item.replyCount ?? 0}
+                                            lastReply={formatLastReply(item.lastReplyAt)}
+                                            onCommentClick={() => handleCommentClick(item)}
+                                            onReactionUpdate={(_msgId, _reactions) => { }}
+                                            onDmReactionSelect={(emoji) => handleReactionUpdate(item.id, emoji)}
+                                            onMessageUpdate={handleDmMessageUpdate}
+                                            onMessageDelete={handleDmMessageDelete}
+                                            onEditSave={dmEditSave}
+                                            onDeleteConfirm={dmDeleteConfirm}
+                                        />
+                                    ))}
+                                </div>
+                            ))
+                        )}
+                        <div ref={bottomRef} />
+                    </div>
+
+                    {/* Editor */}
+                    <div className="w-full z-10 px-4 pb-4 shrink-0">
+                        <MessageEditor userData={user} dmConversationId={conversationId} placeholder={`Message ${otherUserName}`} />
+                    </div>
+                </div>
+            }
 
             {/* Thread panel */}
             {showThread && selectedMessage && (

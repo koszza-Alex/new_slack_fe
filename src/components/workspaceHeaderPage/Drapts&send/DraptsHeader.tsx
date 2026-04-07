@@ -1,6 +1,6 @@
 "use client";
 
-import { HuddleCustomButton } from "../workspaceHeaderPage/huddle/HuddleCustomButton";
+import { HuddleCustomButton } from "../huddle/HuddleCustomButton";
 import { DraftsHero } from "./HeroArea";
 
 

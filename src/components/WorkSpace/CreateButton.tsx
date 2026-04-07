@@ -77,7 +77,6 @@ export default function CreateButton() {
         ))}
 
         <div className="border-t my-1" />
-
         <div className="px-4 py-2 hover:bg-[#F4EDE4] cursor-pointer">
           Invite people
         </div>
