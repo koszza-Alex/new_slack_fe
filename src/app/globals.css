@@ -54,6 +54,29 @@ body {
   float: left;
 }
 
+/* Mention spans — viewer-specific highlight colors */
+.mention {
+  font-weight: 500;
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+/* Current viewer's own mention — light yellow (Slack-style) */
+.mention-self {
+  background-color: #fff3b0;
+  color: #7a5c00;
+}
+/* Another user's mention — light blue */
+.mention-other {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+}
+/* Inside the editor while composing — always blue (viewer context not relevant) */
+.ProseMirror .mention {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+}
+
 .dot {
   width: 10px;
   height: 10px;
